@@ -23,9 +23,13 @@ _Curated durable memories. Updated from daily notes._
 - Hardware: Pimoroni Pico Inky Pack (296×128), Pico W on WiFi `ASUS_E8_2G`
 - Pico IP: `192.168.50.38`, device: `/dev/ttyACM0`
 - Critical: `BLACK=0`, `WHITE=15` — never use mid-range pen values (grey dither)
-- Script `main.py` on Pico W (uploaded 2026-02-21), execution unconfirmed
-- Layout: left = weather data, right = OSM map tile at zoom 11
-- Next: webcam verify → `ffmpeg -f v4l2 -i /dev/video0 -frames:v 1 /tmp/pico_screen.jpg`
+- Script `main.py` on Pico W ✅ uploaded 2026-02-21 (22952 bytes confirmed)
+- **Fully standalone** — no Pi needed; UK map embedded as bytes in main.py
+- Layout: left = today temp/desc/H:L + tomorrow section; right = static UK map + location dot
+- City lookup table (30 UK cities → pixel coords); lat/lon math fallback
+- UK map: 148×113px JPEG embedded as bytes constant, decoded via jpegdec.open_RAM()
+- mpremote was broken (all files 0 bytes) — fixed with pip3 --break-system-packages
+- **TODO**: verify with webcam when room has light; check date_str shows correct time
 
 ## Infrastructure
 - Webcam: `/dev/video0`
