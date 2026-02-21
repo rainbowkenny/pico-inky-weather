@@ -52,7 +52,7 @@ def get_weather(lat, lon):
     return d
 
 def draw_map(display, lat, lon):
-    url = "{}/map?lat={}&lon={}".format(MAP_SERVER, lat, lon)
+    url = "{}/map?lat={}&lon={}&city={}".format(MAP_SERVER, lat, lon, city)
     try:
         gc.collect()
         print("Fetching map:", url)
