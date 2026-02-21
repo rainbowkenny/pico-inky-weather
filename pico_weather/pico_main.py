@@ -2,7 +2,12 @@
 Standalone weather display for Pimoroni Pico Inky Pack (296x128)
 - WiFi → ip-api.com (geolocation) → open-meteo.com (weather) → OSM tile (map)
 - No Raspberry Pi or external server needed
-- Runs on boot via main.py on Pico W
+- Runs automatically on boot (main.py)
+
+Layout:
+  Header  [city            date/time]   y=0..13
+  Left    [temp / desc / H:L / tmr]     x=0..147
+  Right   [full map tile]               x=148..295
 """
 
 import network
@@ -16,12 +21,11 @@ import pngdec
 # ---- Config ----
 SSID     = "ASUS_E8_2G"
 PASSWORD = "Bbdd1003"
-ZOOM     = 13        # OSM zoom level: 13 = ~4.7km tile, good city detail
+ZOOM     = 13        # OSM zoom: 13 = ~4.7 km tile width
 
 BLACK = 0
 WHITE = 15
 
-# WMO weather code → short label
 WMO = {
     0: "Clear",     1: "Clear",     2: "P.Cloudy",  3: "Overcast",
     45: "Fog",      48: "Icy Fog",
@@ -32,21 +36,18 @@ WMO = {
     95: "Thunder",  96: "Thunder",  99: "Thunder",
 }
 
-# ---- Display layout constants ----
-# Header:          y = 0..13   (full width, black bg)
-# Left panel:      x = 0..147, y = 14..127  (weather)
-# Right panel:     x = 148..295
-#   Tomorrow:      y = 14..55
-#   H-divider:     y = 56
-#   Map area:      y = 57..122  (148 x 66 px)
-# Bottom border:   y = 123
+# ---- Display layout ----
+# Header:      y = 0..13    (full width, black bg)
+# Left panel:  x = 0..147,  y = 14..127  (weather + tomorrow)
+# Right panel: x = 148..295, y = 14..127  (full map = 148 x 113 px)
+# Divider:     x = 148,     y = 14..127
 
-MAP_X  = 148   # map area left edge
-MAP_Y  = 57    # map area top edge
-MAP_W  = 148   # map area width
-MAP_H  = 66    # map area height
-MAP_CX = MAP_X + MAP_W // 2   # = 222  (center x)
-MAP_CY = MAP_Y + MAP_H // 2   # = 90   (center y)
+MAP_X  = 148
+MAP_Y  = 14
+MAP_W  = 148   # 295 - 148 + 1
+MAP_H  = 113   # 127 - 14
+MAP_CX = MAP_X + MAP_W // 2   # = 222
+MAP_CY = MAP_Y + MAP_H // 2   # = 70
 
 
 # ---- WiFi ----
@@ -61,7 +62,7 @@ def connect_wifi():
     return wlan.isconnected()
 
 
-# ---- Data fetching ----
+# ---- Data ----
 def get_location():
     gc.collect()
     r = urequests.get("http://ip-api.com/json/?fields=lat,lon,city", timeout=10)
@@ -85,7 +86,6 @@ def get_weather(lat, lon):
 
 # ---- OSM tile math ----
 def lat_lon_to_tile(lat, lon, zoom):
-    """Returns OSM tile (tx, ty) containing lat/lon at given zoom."""
     n = 1 << zoom
     tx = int((lon + 180.0) / 360.0 * n)
     lat_r = math.radians(lat)
@@ -94,7 +94,7 @@ def lat_lon_to_tile(lat, lon, zoom):
 
 
 def tile_pixel_offset(lat, lon, zoom):
-    """Returns pixel position (0-255, 0-255) of lat/lon within its OSM tile."""
+    """Pixel position (0-255, 0-255) of lat/lon within its OSM tile."""
     n = 1 << zoom
     x_f = (lon + 180.0) / 360.0 * n
     lat_r = math.radians(lat)
@@ -102,18 +102,15 @@ def tile_pixel_offset(lat, lon, zoom):
     return int((x_f - int(x_f)) * 256), int((y_f - int(y_f)) * 256)
 
 
-# ---- Map drawing ----
+# ---- Map ----
 def draw_map(display, lat, lon):
     """
-    Fetch OSM tile PNG and decode it so lat/lon lands at MAP_CX, MAP_CY.
-    The tile may overdraw into weather/tomorrow areas — caller masks those
-    with white rectangles afterwards.
-    Returns True on success, False on failure (caller draws crosshair).
+    Fetch OSM tile, decode so lat/lon sits at MAP_CX, MAP_CY.
+    Returns True on success.
     """
     tx, ty = lat_lon_to_tile(lat, lon, ZOOM)
     px, py = tile_pixel_offset(lat, lon, ZOOM)
 
-    # Offset so the target location sits at the map viewport centre
     decode_x = MAP_CX - px
     decode_y = MAP_CY - py
 
@@ -122,19 +119,18 @@ def draw_map(display, lat, lon):
 
     try:
         gc.collect()
-        print("Tile:", url, "| decode at ({},{})".format(decode_x, decode_y))
+        print("Tile:", url)
         r = urequests.get(url, headers=headers, timeout=25)
         data = r.content
         r.close()
-        print("Tile size:", len(data), "B")
+        print("Tile {}B, decode at ({},{})".format(len(data), decode_x, decode_y))
         gc.collect()
 
         png = pngdec.PNG(display)
         png.open_RAM(data)
         png.decode(decode_x, decode_y)
-        data = None
-        gc.collect()
-        print("Map decoded OK")
+        data = None; gc.collect()
+        print("Map OK")
         return True
 
     except Exception as e:
@@ -142,8 +138,15 @@ def draw_map(display, lat, lon):
         return False
 
 
+def draw_location_dot(display):
+    display.set_pen(BLACK)
+    display.circle(MAP_CX, MAP_CY, 5)
+    display.set_pen(WHITE)
+    display.circle(MAP_CX, MAP_CY, 2)
+    display.set_pen(BLACK)
+
+
 def draw_crosshair(display, lat, lon):
-    """Fallback when map tile fetch fails."""
     display.set_pen(BLACK)
     display.circle(MAP_CX, MAP_CY, 25)
     display.line(MAP_CX - 30, MAP_CY, MAP_CX + 30, MAP_CY)
@@ -156,26 +159,17 @@ def draw_crosshair(display, lat, lon):
     display.text("{:.2f}N {:.2f}E".format(lat, lon), MAP_X + 2, MAP_Y + MAP_H - 14, scale=1)
 
 
-def draw_location_dot(display):
-    """Small filled dot at map centre to mark location (drawn over tile)."""
-    display.set_pen(BLACK)
-    display.circle(MAP_CX, MAP_CY, 5)
-    display.set_pen(WHITE)
-    display.circle(MAP_CX, MAP_CY, 2)
-    display.set_pen(BLACK)
-
-
 # ======== MAIN ========
 display = PicoGraphics(display=DISPLAY_INKY_PACK)
 
-# --- Startup splash ---
+# Startup splash
 display.set_pen(WHITE); display.clear()
 display.set_pen(BLACK)
 display.set_font("bitmap8")
 display.text("Connecting...", 10, 55, scale=1)
 display.update()
 
-# --- WiFi ---
+# WiFi
 print("WiFi...")
 if not connect_wifi():
     display.set_pen(WHITE); display.clear()
@@ -184,12 +178,12 @@ if not connect_wifi():
     display.update()
     raise SystemExit("no wifi")
 
-# --- Location ---
+# Location
 print("Location...")
 lat, lon, city = get_location()
 print("  {} {:.4f},{:.4f}".format(city, lat, lon))
 
-# --- Weather ---
+# Weather
 print("Weather...")
 data     = get_weather(lat, lon)
 cw       = data["current_weather"]
@@ -214,55 +208,53 @@ date_str = "{}/{} {:02d}:{:02d}".format(t[2], t[1], t[3], t[4])
 display.set_pen(WHITE)
 display.clear()
 
-# 2. Draw map tile first (may overdraw weather + tomorrow areas — masked next)
+# 2. Map tile first — may overdraw left panel area (masked below)
 print("Map...")
 map_ok = draw_map(display, lat, lon)
 
-# 3. White mask: left weather panel + right tomorrow section
-#    This erases any tile overdraw outside the map area
+# 3. White mask over left panel to erase tile overdraw
 display.set_pen(WHITE)
-display.rectangle(0, 0, 148, 128)       # entire left panel
-display.rectangle(148, 14, 148, 43)     # tomorrow section (y=14..56)
+display.rectangle(0, 0, 148, 128)
 
-# 4. Header bar (full width)
+# 4. Header bar
 display.set_pen(BLACK)
 display.rectangle(0, 0, 296, 14)
 display.set_pen(WHITE)
 display.set_font("bitmap6")
-display.text(city[:16], 3, 4, scale=1)
-display.text(date_str, 200, 4, scale=1)
+display.text(city[:14], 3, 4, scale=1)
+display.text(date_str, 198, 4, scale=1)
 
-# 5. Left panel: temperature + conditions
+# 5. Left panel — today
 display.set_pen(BLACK)
 display.set_font("bitmap8")
-display.text("{}C".format(temp), 4, 18, scale=3)
+display.text("{}C".format(temp), 4, 18, scale=3)   # big temperature
+
 display.set_font("bitmap6")
-display.text(desc, 4, 67, scale=1)
-display.text("H:{}  L:{}".format(hmax, hmin), 4, 79, scale=1)
+display.text(desc, 4, 58, scale=1)
+display.text("H:{}  L:{}".format(hmax, hmin), 4, 70, scale=1)
 
-# 6. Vertical divider
+# 6. Left panel — tomorrow (below a divider)
 display.set_pen(BLACK)
-display.line(148, 14, 148, 123)
+display.line(4, 84, 143, 84)
 
-# 7. Tomorrow forecast (top-right)
 display.set_font("bitmap8")
-display.text("Tmr", 152, 18, scale=1)
+display.text("Tmr", 4, 90, scale=1)
 display.set_font("bitmap6")
-display.text(tmr_desc, 152, 32, scale=1)
-display.text("H:{}  L:{}".format(tmax, tmin), 152, 44, scale=1)
+display.text(tmr_desc, 4, 104, scale=1)
+display.text("H:{}  L:{}".format(tmax, tmin), 4, 115, scale=1)
 
-# 8. Horizontal divider (tomorrow / map boundary)
+# 7. Vertical divider
 display.set_pen(BLACK)
-display.line(149, 56, 295, 56)
+display.line(148, 14, 148, 127)
 
-# 9. Location dot on map (or crosshair fallback)
+# 8. Location dot or crosshair over map
 if map_ok:
     draw_location_dot(display)
 else:
     draw_crosshair(display, lat, lon)
 
-# 10. Bottom border + push to E-Ink
+# 9. Bottom border + update
 display.set_pen(BLACK)
-display.line(0, 123, 295, 123)
+display.line(0, 127, 295, 127)
 display.update()
 print("Done!")
