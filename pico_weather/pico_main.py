@@ -71,11 +71,15 @@ def get_weather(lat, lon):
     url = ("https://api.open-meteo.com/v1/forecast"
            "?latitude={}&longitude={}"
            "&current_weather=true"
-           "&daily=temperature_2m_max,temperature_2m_min,weathercode"
+           "&daily=temperature_2m_max,temperature_2m_min,weathercode,precipitation_sum"
            "&forecast_days=2&timezone=auto").format(lat, lon)
     r = urequests.get(url, timeout=15)
     d = r.json(); r.close(); gc.collect()
     return d
+
+def deg_to_compass(deg):
+    dirs = ["N","NE","E","SE","S","SW","W","NW"]
+    return dirs[int((deg + 22.5) / 45) % 8]
 
 def parse_time(wt):
     try:
@@ -543,6 +547,12 @@ while True:
         tmin     = int(daily["temperature_2m_min"][1])
         tmr_desc = WMO.get(int(daily["weathercode"][1]), "?")
         date_str = parse_time(cw.get("time", ""))
+        wind_spd = int(cw.get("windspeed", 0))
+        wind_dir = deg_to_compass(float(cw.get("winddirection", 0)))
+        rain_0   = daily["precipitation_sum"][0]   # today mm
+        rain_1   = daily["precipitation_sum"][1]   # tomorrow mm
+        rain_0   = "{:.1f}mm".format(rain_0) if rain_0 is not None else "--"
+        rain_1   = "{:.1f}mm".format(rain_1) if rain_1 is not None else "--"
         gc.collect()
 
         # --- DRAW ---
@@ -571,15 +581,17 @@ while True:
         display.set_pen(BLACK); display.set_font("bitmap8")
         display.text("{}C".format(temp), 4, 18, scale=3)
         display.set_font("bitmap6")
-        display.text(desc, 4, 58, scale=1)
-        display.text("H:{}  L:{}".format(hmax, hmin), 4, 70, scale=1)
+        display.text(desc, 4, 44, scale=1)
+        display.text("H:{}  L:{}".format(hmax, hmin), 4, 54, scale=1)
+        display.text("{} {}km/h".format(wind_dir, wind_spd), 4, 64, scale=1)
+        display.text("Rain:{}".format(rain_0), 4, 74, scale=1)
 
         # 5. Left: tomorrow
         display.set_pen(BLACK); display.line(4, 84, 143, 84)
-        display.set_font("bitmap8"); display.text("Tmr", 4, 90, scale=1)
         display.set_font("bitmap6")
-        display.text(tmr_desc, 4, 104, scale=1)
-        display.text("H:{}  L:{}".format(tmax, tmin), 4, 115, scale=1)
+        display.text("Tmr:{}".format(tmr_desc), 4, 88, scale=1)
+        display.text("H:{}  L:{}".format(tmax, tmin), 4, 98, scale=1)
+        display.text("Rain:{}".format(rain_1), 4, 108, scale=1)
 
         # 6. Divider
         display.set_pen(BLACK); display.line(148, 14, 148, 127)
@@ -604,8 +616,8 @@ while True:
         time.sleep(30)
         continue
 
-    # --- BUTTON POLL (wait up to 30 min, then auto-refresh) ---
-    deadline = time.time() + 1800
+    # --- BUTTON POLL (wait up to 10 min, then auto-refresh) ---
+    deadline = time.time() + 600
     while time.time() < deadline:
         btn = btn_pressed()
         if btn == 'a':
