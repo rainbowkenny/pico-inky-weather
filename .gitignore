@@ -2,3 +2,14 @@
 __pycache__/
 *.pyc
 *.pyo
+
+# Private agent files — backed up to NAS only
+SOUL.md
+USER.md
+IDENTITY.md
+AGENTS.md
+HEARTBEAT.md
+BOOTSTRAP.md
+MEMORY.md
+memory/
+portfolio.md
