@@ -443,130 +443,174 @@ UK_MAP = (
     b'\xa2\x8a(\xa2\x8a(\xaf\xff\xd9'
 )
 
+# ===== HELPERS =====
+CYCLE_SLOT    = 15   # seconds per city in auto-cycle
+MANUAL_TIMEOUT = 10  # seconds before returning to Auto after manual browse
+
+weather_cache = [None] * len(PRESET_CITIES)
+
+def fetch_weather(idx):
+    """Fetch weather for PRESET_CITIES[idx], store in weather_cache[idx]."""
+    try:
+        preset = PRESET_CITIES[idx]
+        if preset[0] is None:
+            lat, lon, city = get_location()
+        else:
+            city, lat, lon = preset[0], preset[1], preset[2]
+        data  = get_weather(lat, lon)
+        cw    = data["current_weather"]
+        daily = data["daily"]
+        r0    = daily["precipitation_sum"][0]
+        r1    = daily["precipitation_sum"][1]
+        wd    = float(cw.get("winddirection", 0))
+        entry = {
+            'city': city, 'lat': lat, 'lon': lon,
+            'temp':     int(cw["temperature"]),
+            'desc':     WMO.get(int(cw["weathercode"]), "?"),
+            'hmax':     int(daily["temperature_2m_max"][0]),
+            'hmin':     int(daily["temperature_2m_min"][0]),
+            'tmax':     int(daily["temperature_2m_max"][1]),
+            'tmin':     int(daily["temperature_2m_min"][1]),
+            'tmr_desc': WMO.get(int(daily["weathercode"][1]), "?"),
+            'date_str': parse_time(cw.get("time", "")),
+            'wind_spd': int(cw.get("windspeed", 0)),
+            'wind_deg': wd,
+            'wind_dir': deg_to_compass(wd),
+            'rain_0':   "{:.1f}mm".format(r0) if r0 is not None else "--",
+            'rain_1':   "{:.1f}mm".format(r1) if r1 is not None else "--",
+        }
+        weather_cache[idx] = entry
+        gc.collect()
+    except Exception:
+        gc.collect()   # keep old cache on failure
+
+def refresh_all():
+    """Refresh all cities. Shows 'Updating N/10' on screen."""
+    connect_wifi()
+    n = len(PRESET_CITIES)
+    for i in range(n):
+        display.set_pen(WHITE); display.clear()
+        display.set_pen(BLACK); display.set_font("bitmap6")
+        display.text("Updating {}/{}...".format(i + 1, n), 10, 55, scale=1)
+        display.update()
+        fetch_weather(i)
+
+def draw_cache(c, idx):
+    """Render weather from cache entry c."""
+    city = c['city']
+    display.set_pen(WHITE); display.clear()
+
+    # 1. UK map
+    j = jpegdec.JPEG(display)
+    j.open_RAM(UK_MAP)
+    j.decode(MAP_X, MAP_Y)
+    del j; gc.collect()
+
+    # 2. Mask left panel
+    display.set_pen(WHITE); display.rectangle(0, 0, MAP_X, 128)
+
+    # 3. Header
+    display.set_pen(BLACK); display.rectangle(0, 0, 296, 14)
+    display.set_pen(WHITE); display.set_font("bitmap6")
+    display.text(city[:14], 3, 4, scale=1)
+    page_str = "{}/{}".format(idx, len(PRESET_CITIES) - 1) if idx > 0 else "Auto"
+    display.text(page_str, 160, 4, scale=1)
+    ds = c['date_str']
+    display.text(ds[6:] if len(ds) > 6 else ds, 220, 4, scale=1)
+
+    # 4. Today
+    display.set_pen(BLACK); display.set_font("bitmap8")
+    display.text("{}C".format(c['temp']), 4, 18, scale=3)
+    display.set_font("bitmap6")
+    display.text(c['desc'], 4, 44, scale=1)
+    display.text("H:{}  L:{}".format(c['hmax'], c['hmin']), 4, 54, scale=1)
+    draw_wind_arrow(display, 10, 69, c['wind_deg'], size=6)
+    display.set_font("bitmap6")
+    display.text("{} {}km/h".format(c['wind_dir'], c['wind_spd']), 22, 64, scale=1)
+    display.text("Rain:{}".format(c['rain_0']), 4, 74, scale=1)
+
+    # 5. Tomorrow
+    display.set_pen(BLACK); display.line(4, 84, 143, 84)
+    display.set_font("bitmap6")
+    display.text("Tmr:{}".format(c['tmr_desc']), 4, 88, scale=1)
+    display.text("H:{}  L:{}".format(c['tmax'], c['tmin']), 4, 98, scale=1)
+    display.text("Rain:{}".format(c['rain_1']), 4, 108, scale=1)
+
+    # 6. Divider + location dot
+    display.set_pen(BLACK); display.line(148, 14, 148, 127)
+    if city in CITY_DOTS:
+        dx, dy = CITY_DOTS[city]
+    else:
+        dx, dy = latlon_to_dot(c['lat'], c['lon'])
+    display.set_pen(BLACK); display.circle(dx, dy, 5)
+    display.set_pen(WHITE); display.circle(dx, dy, 2)
+    display.set_pen(BLACK)
+    display.line(0, 127, 295, 127)
+    display.update()
+
 # ===== MAIN =====
 display = PicoGraphics(display=DISPLAY_INKY_PACK)
-city_idx = load_city_idx()
 
-# Show boot splash
 display.set_pen(WHITE); display.clear()
 display.set_pen(BLACK); display.set_font("bitmap8")
-display.text("Connecting...", 10, 55, scale=1)
+display.text("Loading...", 10, 55, scale=1)
 display.update()
 
 if not connect_wifi():
     show_error(display, "WiFi failed")
     raise SystemExit
 
+refresh_all()
+last_refresh = time.time()
+
+city_idx = 0    # start at Auto
+mode     = 'cycle'
+
 while True:
+    c = weather_cache[city_idx]
+    if c is None:
+        city_idx = (city_idx + 1) % len(PRESET_CITIES)
+        continue
+
     try:
-        # Resolve city
-        preset = PRESET_CITIES[city_idx]
-        if preset[0] is None:
-            lat, lon, city = get_location()
-        else:
-            city, lat, lon = preset[0], preset[1], preset[2]
-            # still need connect to fetch weather
-            connect_wifi()
-
-        data     = get_weather(lat, lon)
-        cw       = data["current_weather"]
-        daily    = data["daily"]
-
-        temp     = int(cw["temperature"])
-        desc     = WMO.get(int(cw["weathercode"]), "?")
-        hmax     = int(daily["temperature_2m_max"][0])
-        hmin     = int(daily["temperature_2m_min"][0])
-        tmax     = int(daily["temperature_2m_max"][1])
-        tmin     = int(daily["temperature_2m_min"][1])
-        tmr_desc = WMO.get(int(daily["weathercode"][1]), "?")
-        date_str = parse_time(cw.get("time", ""))
-        wind_spd = int(cw.get("windspeed", 0))
-        wind_deg = float(cw.get("winddirection", 0))
-        wind_dir = deg_to_compass(wind_deg)
-        rain_0   = daily["precipitation_sum"][0]   # today mm
-        rain_1   = daily["precipitation_sum"][1]   # tomorrow mm
-        rain_0   = "{:.1f}mm".format(rain_0) if rain_0 is not None else "--"
-        rain_1   = "{:.1f}mm".format(rain_1) if rain_1 is not None else "--"
-        gc.collect()
-
-        # --- DRAW ---
-        display.set_pen(WHITE); display.clear()
-
-        # 1. UK map
-        j = jpegdec.JPEG(display)
-        j.open_RAM(UK_MAP)
-        j.decode(MAP_X, MAP_Y)
-
-        # 2. Mask left panel
-        display.set_pen(WHITE); display.rectangle(0, 0, MAP_X, 128)
-
-        # 3. Header — show city name + page indicator + time
-        display.set_pen(BLACK); display.rectangle(0, 0, 296, 14)
-        display.set_pen(WHITE); display.set_font("bitmap6")
-        # City label: show preset name or auto-resolved name
-        label = city[:14]
-        display.text(label, 3, 4, scale=1)
-        # Page indicator e.g. "2/10"
-        page_str = "{}/{}".format(city_idx, len(PRESET_CITIES) - 1) if city_idx > 0 else "Auto"
-        display.text(page_str, 160, 4, scale=1)
-        display.text(date_str[6:] if len(date_str) > 6 else date_str, 220, 4, scale=1)
-
-        # 4. Left: today
-        display.set_pen(BLACK); display.set_font("bitmap8")
-        display.text("{}C".format(temp), 4, 18, scale=3)
-        display.set_font("bitmap6")
-        display.text(desc, 4, 44, scale=1)
-        display.text("H:{}  L:{}".format(hmax, hmin), 4, 54, scale=1)
-        draw_wind_arrow(display, 10, 69, wind_deg, size=6)
-        display.set_font("bitmap6")
-        display.text("{} {}km/h".format(wind_dir, wind_spd), 22, 64, scale=1)
-        display.text("Rain:{}".format(rain_0), 4, 74, scale=1)
-
-        # 5. Left: tomorrow
-        display.set_pen(BLACK); display.line(4, 84, 143, 84)
-        display.set_font("bitmap6")
-        display.text("Tmr:{}".format(tmr_desc), 4, 88, scale=1)
-        display.text("H:{}  L:{}".format(tmax, tmin), 4, 98, scale=1)
-        display.text("Rain:{}".format(rain_1), 4, 108, scale=1)
-
-        # 6. Divider
-        display.set_pen(BLACK); display.line(148, 14, 148, 127)
-
-        # 7. Location dot
-        if city in CITY_DOTS:
-            dx, dy = CITY_DOTS[city]
-        else:
-            dx, dy = latlon_to_dot(lat, lon)
-        display.set_pen(BLACK); display.circle(dx, dy, 5)
-        display.set_pen(WHITE); display.circle(dx, dy, 2)
-        display.set_pen(BLACK)
-
-        display.line(0, 127, 295, 127)
-        display.update()
-
+        draw_cache(c, city_idx)
     except Exception as e:
         try:
             show_error(display, e)
         except Exception:
             pass
-        time.sleep(30)
-        continue
+        time.sleep(10)
 
-    # --- BUTTON POLL (wait up to 10 min, then auto-refresh) ---
-    deadline = time.time() + 600
+    # Button poll
+    slot     = MANUAL_TIMEOUT if mode == 'manual' else CYCLE_SLOT
+    deadline = time.time() + slot
+    action   = None
     while time.time() < deadline:
         btn = btn_pressed()
-        if btn == 'a':
-            city_idx = (city_idx - 1) % len(PRESET_CITIES)
-            save_city_idx(city_idx)
-            break
-        elif btn == 'b':
-            city_idx = (city_idx + 1) % len(PRESET_CITIES)
-            save_city_idx(city_idx)
-            break
-        elif btn == 'c':
-            city_idx = HOME_CITY_IDX   # go home (Cambridge)
-            save_city_idx(city_idx)
+        if btn:
+            action = btn
             break
         time.sleep_ms(100)
-    # loop → re-fetch and redraw
+
+    if action == 'a':
+        city_idx = (city_idx - 1) % len(PRESET_CITIES)
+        mode = 'manual'
+    elif action == 'b':
+        city_idx = (city_idx + 1) % len(PRESET_CITIES)
+        mode = 'manual'
+    elif action == 'c':
+        city_idx = HOME_CITY_IDX
+        mode = 'manual'
+    else:
+        if mode == 'manual':
+            city_idx = 0   # back to Auto
+            mode = 'cycle'
+        else:
+            city_idx = (city_idx + 1) % len(PRESET_CITIES)
+
+    # Every 10 min: refresh all caches
+    if time.time() - last_refresh >= 600:
+        refresh_all()
+        last_refresh = time.time()
+        city_idx = 0
+        mode = 'cycle'
