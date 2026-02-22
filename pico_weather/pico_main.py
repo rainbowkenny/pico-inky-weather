@@ -444,7 +444,6 @@ UK_MAP = (
 )
 
 # ===== HELPERS =====
-CYCLE_SLOT    = 15   # seconds per city in auto-cycle
 MANUAL_TIMEOUT = 10  # seconds before returning to Auto after manual browse
 
 weather_cache = [None] * len(PRESET_CITIES)
@@ -485,14 +484,9 @@ def fetch_weather(idx):
         gc.collect()   # keep old cache on failure
 
 def refresh_all():
-    """Refresh all cities. Shows 'Updating N/10' on screen."""
+    """Silently refresh weather cache for all cities."""
     connect_wifi()
-    n = len(PRESET_CITIES)
-    for i in range(n):
-        display.set_pen(WHITE); display.clear()
-        display.set_pen(BLACK); display.set_font("bitmap6")
-        display.text("Updating {}/{}...".format(i + 1, n), 10, 55, scale=1)
-        display.update()
+    for i in range(len(PRESET_CITIES)):
         fetch_weather(i)
 
 def draw_cache(c, idx):
@@ -564,7 +558,7 @@ refresh_all()
 last_refresh = time.time()
 
 city_idx = 0    # start at Auto
-mode     = 'cycle'
+mode     = 'default'
 
 while True:
     c = weather_cache[city_idx]
@@ -582,14 +576,20 @@ while True:
         time.sleep(10)
 
     # Button poll
-    slot     = MANUAL_TIMEOUT if mode == 'manual' else CYCLE_SLOT
-    deadline = time.time() + slot
-    action   = None
+    if mode == 'manual':
+        deadline = time.time() + MANUAL_TIMEOUT
+    else:
+        deadline = time.time() + 600   # default: wait up to 10 min
+    action = None
     while time.time() < deadline:
         btn = btn_pressed()
         if btn:
             action = btn
             break
+        # Every 10 min: silently refresh all caches in background
+        if time.time() - last_refresh >= 600:
+            refresh_all()
+            last_refresh = time.time()
         time.sleep_ms(100)
 
     if action == 'a':
@@ -602,15 +602,6 @@ while True:
         city_idx = HOME_CITY_IDX
         mode = 'manual'
     else:
-        if mode == 'manual':
-            city_idx = 0   # back to Auto
-            mode = 'cycle'
-        else:
-            city_idx = (city_idx + 1) % len(PRESET_CITIES)
-
-    # Every 10 min: refresh all caches
-    if time.time() - last_refresh >= 600:
-        refresh_all()
-        last_refresh = time.time()
+        # Timeout: return to Auto
         city_idx = 0
-        mode = 'cycle'
+        mode = 'default'
