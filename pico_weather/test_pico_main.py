@@ -4,18 +4,21 @@ Mocks all MicroPython hardware modules so tests run on standard Python.
 Run: python3 -m pytest pico_weather/test_pico_main.py -v
   or: python3 pico_weather/test_pico_main.py
 """
+
+import math
 import sys
 import types
-import math
 import unittest
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, call, patch
 
 # ── Mock MicroPython / hardware modules before importing pico_main ────────────
+
 
 def _make_mock_module(name):
     m = types.ModuleType(name)
     sys.modules[name] = m
     return m
+
 
 # network
 net = _make_mock_module("network")
@@ -40,10 +43,12 @@ jd.JPEG = MagicMock()
 
 # gc (use real gc but also expose it as the mock)
 import gc
+
 sys.modules["gc"] = gc
 
 # time (use real time)
 import time as _time
+
 sys.modules["time"] = _time
 
 # Now we can safely import the logic from pico_main
@@ -51,6 +56,7 @@ sys.modules["time"] = _time
 # to avoid running the hardware init at module level.
 
 _SRC_PATH = __file__.replace("test_pico_main.py", "pico_main.py")
+
 
 def _load_logic():
     """Return a namespace containing all functions/constants from pico_main."""
@@ -64,40 +70,42 @@ def _load_logic():
     exec(compile(src[:cut], _SRC_PATH, "exec"), ns)
     return ns
 
+
 NS = _load_logic()
 
 # Pull names into module scope for convenience
-deg_to_compass  = NS["deg_to_compass"]
-latlon_to_dot   = NS["latlon_to_dot"]
-parse_time      = NS["parse_time"]
-WMO             = NS["WMO"]
-CITY_DOTS       = NS["CITY_DOTS"]
-PRESET_CITIES   = NS["PRESET_CITIES"]
-HOME_CITY_IDX   = NS["HOME_CITY_IDX"]
-MAP_X           = NS["MAP_X"]
-MAP_Y           = NS["MAP_Y"]
-_X_OFF          = NS["_X_OFF"]
-_MAP_W          = NS["_MAP_W"]
-_Y_OFF          = NS["_Y_OFF"]
-_MAP_H          = NS["_MAP_H"]
-MANUAL_TIMEOUT  = NS["MANUAL_TIMEOUT"]
+deg_to_compass = NS["deg_to_compass"]
+latlon_to_dot = NS["latlon_to_dot"]
+parse_time = NS["parse_time"]
+WMO = NS["WMO"]
+CITY_DOTS = NS["CITY_DOTS"]
+PRESET_CITIES = NS["PRESET_CITIES"]
+HOME_CITY_IDX = NS["HOME_CITY_IDX"]
+MAP_X = NS["MAP_X"]
+MAP_Y = NS["MAP_Y"]
+_X_OFF = NS["_X_OFF"]
+_MAP_W = NS["_MAP_W"]
+_Y_OFF = NS["_Y_OFF"]
+_MAP_H = NS["_MAP_H"]
+MANUAL_TIMEOUT = NS["MANUAL_TIMEOUT"]
 
 # ── Tests ─────────────────────────────────────────────────────────────────────
+
 
 class TestDegToCompass(unittest.TestCase):
     """deg_to_compass should map 360° to 8 compass points."""
 
     def test_north(self):
-        self.assertEqual(deg_to_compass(0),   "N")
+        self.assertEqual(deg_to_compass(0), "N")
         self.assertEqual(deg_to_compass(360), "N")
 
     def test_northeast(self):
-        self.assertEqual(deg_to_compass(45),  "NE")
-        self.assertEqual(deg_to_compass(22),  "N")   # just inside N
-        self.assertEqual(deg_to_compass(23),  "NE")  # just inside NE
+        self.assertEqual(deg_to_compass(45), "NE")
+        self.assertEqual(deg_to_compass(22), "N")  # just inside N
+        self.assertEqual(deg_to_compass(23), "NE")  # just inside NE
 
     def test_east(self):
-        self.assertEqual(deg_to_compass(90),  "E")
+        self.assertEqual(deg_to_compass(90), "E")
 
     def test_southeast(self):
         self.assertEqual(deg_to_compass(135), "SE")
@@ -115,8 +123,8 @@ class TestDegToCompass(unittest.TestCase):
         self.assertEqual(deg_to_compass(315), "NW")
 
     def test_all_8_covered(self):
-        expected = {"N","NE","E","SE","S","SW","W","NW"}
-        got = {deg_to_compass(i*45) for i in range(8)}
+        expected = {"N", "NE", "E", "SE", "S", "SW", "W", "NW"}
+        got = {deg_to_compass(i * 45) for i in range(8)}
         self.assertEqual(got, expected)
 
 
@@ -149,27 +157,27 @@ class TestLatLonToDot(unittest.TestCase):
     def test_london_approximate(self):
         # London ~51.5°N, -0.1°W → should be near bottom-centre of map
         x, y = latlon_to_dot(51.5, -0.12)
-        self.assertGreater(x, MAP_X)          # right of divider
-        self.assertLess(x, MAP_X + 148)       # within panel
+        self.assertGreater(x, MAP_X)  # right of divider
+        self.assertLess(x, MAP_X + 148)  # within panel
         self.assertGreater(y, MAP_Y)
         self.assertLess(y, 128)
 
     def test_edinburgh_higher_than_london(self):
         _, y_lon = latlon_to_dot(51.5, -0.12)
         _, y_edi = latlon_to_dot(55.95, -3.19)
-        self.assertLess(y_edi, y_lon)          # Edinburgh is further north → smaller y
+        self.assertLess(y_edi, y_lon)  # Edinburgh is further north → smaller y
 
     def test_east_further_right(self):
         x_west, _ = latlon_to_dot(52.0, -3.0)
-        x_east, _ = latlon_to_dot(52.0,  1.5)
+        x_east, _ = latlon_to_dot(52.0, 1.5)
         self.assertLess(x_west, x_east)
 
     def test_clamps_to_map_bounds(self):
         # Way off map should clamp
-        x_min, y_min = latlon_to_dot(90.0,  180.0)   # extreme NE
+        x_min, y_min = latlon_to_dot(90.0, 180.0)  # extreme NE
         x_max, y_max = latlon_to_dot(-90.0, -180.0)  # extreme SW
         self.assertGreaterEqual(x_min, MAP_X + _X_OFF)
-        self.assertLessEqual(x_max,    MAP_X + _X_OFF + _MAP_W)
+        self.assertLessEqual(x_max, MAP_X + _X_OFF + _MAP_W)
 
 
 class TestWMO(unittest.TestCase):
@@ -209,10 +217,10 @@ class TestPresetCities(unittest.TestCase):
     def test_all_presets_have_valid_coords(self):
         for name, lat, lon in PRESET_CITIES[1:]:  # skip Auto
             self.assertIsNotNone(name)
-            self.assertGreater(lat, 49.0,  msg=f"{name} lat too low")
-            self.assertLess(lat,    62.0,  msg=f"{name} lat too high")
-            self.assertGreater(lon, -8.0,  msg=f"{name} lon too far west")
-            self.assertLess(lon,     3.0,  msg=f"{name} lon too far east")
+            self.assertGreater(lat, 49.0, msg=f"{name} lat too low")
+            self.assertLess(lat, 62.0, msg=f"{name} lat too high")
+            self.assertGreater(lon, -8.0, msg=f"{name} lon too far west")
+            self.assertLess(lon, 3.0, msg=f"{name} lon too far east")
 
     def test_preset_cities_in_city_dots(self):
         """Every named preset city should have a dot in CITY_DOTS."""
@@ -220,7 +228,9 @@ class TestPresetCities(unittest.TestCase):
         for name, lat, lon in PRESET_CITIES[1:]:
             if name not in CITY_DOTS:
                 missing.append(name)
-        self.assertEqual(missing, [], msg="Missing CITY_DOTS entries: {}".format(missing))
+        self.assertEqual(
+            missing, [], msg="Missing CITY_DOTS entries: {}".format(missing)
+        )
 
 
 class TestFetchWeather(unittest.TestCase):
@@ -232,14 +242,14 @@ class TestFetchWeather(unittest.TestCase):
             "weathercode": 3,
             "windspeed": 18.0,
             "winddirection": 270.0,
-            "time": "2026-02-22T08:00"
+            "time": "2026-02-22T08:00",
         },
         "daily": {
             "temperature_2m_max": [14.0, 11.0],
-            "temperature_2m_min": [8.0,  5.0],
-            "weathercode":        [3,    61],
-            "precipitation_sum":  [0.5,  2.1],
-        }
+            "temperature_2m_min": [8.0, 5.0],
+            "weathercode": [3, 61],
+            "precipitation_sum": [0.5, 2.1],
+        },
     }
 
     MOCK_LOCATION = (52.205, 0.122, "Cambridge")
@@ -256,32 +266,32 @@ class TestFetchWeather(unittest.TestCase):
         mock_resp.json.return_value = weather
         ureq.get = MagicMock(return_value=mock_resp)
 
-        NS["get_weather"]  = MagicMock(return_value=weather)
+        NS["get_weather"] = MagicMock(return_value=weather)
         NS["get_location"] = MagicMock(return_value=location)
         NS["connect_wifi"] = MagicMock(return_value=True)
 
     def test_fetch_preset_city(self):
         self._patch_apis()
-        NS["fetch_weather"](HOME_CITY_IDX)   # Cambridge
+        NS["fetch_weather"](HOME_CITY_IDX)  # Cambridge
         c = NS["weather_cache"][HOME_CITY_IDX]
         self.assertIsNotNone(c)
-        self.assertEqual(c["city"],     "Cambridge")
-        self.assertEqual(c["temp"],     12)
-        self.assertEqual(c["desc"],     "Overcast")
+        self.assertEqual(c["city"], "Cambridge")
+        self.assertEqual(c["temp"], 12)
+        self.assertEqual(c["desc"], "Overcast")
         self.assertEqual(c["wind_dir"], "W")
         self.assertEqual(c["wind_spd"], 18)
-        self.assertEqual(c["rain_0"],   "0.5mm")
-        self.assertEqual(c["rain_1"],   "2.1mm")
-        self.assertEqual(c["hmax"],     14)
-        self.assertEqual(c["hmin"],     8)
-        self.assertEqual(c["tmax"],     11)
-        self.assertEqual(c["tmin"],     5)
+        self.assertEqual(c["rain_0"], "0.5mm")
+        self.assertEqual(c["rain_1"], "2.1mm")
+        self.assertEqual(c["hmax"], 14)
+        self.assertEqual(c["hmin"], 8)
+        self.assertEqual(c["tmax"], 11)
+        self.assertEqual(c["tmin"], 5)
         self.assertEqual(c["tmr_desc"], "Lt Rain")
         self.assertEqual(c["date_str"], "22/2 08:00")
 
     def test_fetch_auto_city_uses_geolocation(self):
         self._patch_apis()
-        NS["fetch_weather"](0)    # Auto
+        NS["fetch_weather"](0)  # Auto
         NS["get_location"].assert_called_once()
         c = NS["weather_cache"][0]
         self.assertIsNotNone(c)
@@ -339,39 +349,39 @@ class TestStateMachine(unittest.TestCase):
 
     def test_timeout_in_manual_returns_to_auto(self):
         # Simulate: manual mode, timeout fires
-        mode = 'manual'
+        mode = "manual"
         city_idx = 5
-        action = None   # no button press = timeout
+        action = None  # no button press = timeout
         if action is None:
-            if mode == 'manual':
+            if mode == "manual":
                 city_idx = 0
-                mode = 'default'
+                mode = "default"
         self.assertEqual(city_idx, 0)
-        self.assertEqual(mode, 'default')
+        self.assertEqual(mode, "default")
 
     def test_timeout_in_default_stays_at_auto(self):
-        mode = 'default'
+        mode = "default"
         city_idx = 0
         action = None
         if action is None:
-            if mode == 'manual':
+            if mode == "manual":
                 city_idx = 0
-                mode = 'default'
+                mode = "default"
             # else: stay on Auto (city_idx unchanged)
         self.assertEqual(city_idx, 0)
-        self.assertEqual(mode, 'default')
+        self.assertEqual(mode, "default")
 
     def test_c_button_goes_to_cambridge(self):
         city_idx = 7
-        mode = 'default'
-        action = 'c'
-        if action == 'c':
+        mode = "default"
+        action = "c"
+        if action == "c":
             city_idx = HOME_CITY_IDX
-            mode = 'manual'
+            mode = "manual"
         self.assertEqual(city_idx, HOME_CITY_IDX)
         name, _, _ = PRESET_CITIES[city_idx]
         self.assertEqual(name, "Cambridge")
-        self.assertEqual(mode, 'manual')
+        self.assertEqual(mode, "manual")
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────

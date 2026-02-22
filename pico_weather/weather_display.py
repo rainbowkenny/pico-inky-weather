@@ -4,9 +4,9 @@ Weather Display for Pimoroni Pico Inky Pack (296x128 E-Ink)
 Fetches weather from wttr.in, pushes display script to Pico via mpremote.
 """
 
+import json
 import subprocess
 import sys
-import json
 import urllib.request
 from datetime import datetime
 
@@ -64,37 +64,39 @@ WEATHER_CODES = {
     "395": ("Blizzard", "(***!!) "),
 }
 
+
 def get_weather(location):
     url = f"https://wttr.in/{location.replace(' ', '+')}?format=j1"
     req = urllib.request.Request(url, headers={"User-Agent": "curl/7.68.0"})
     with urllib.request.urlopen(req, timeout=15) as resp:
         return json.loads(resp.read())
 
+
 def format_weather(data):
     current = data["current_condition"][0]
     today = data["weather"][0]
     tomorrow = data["weather"][1]
-    
+
     temp_c = current["temp_C"]
     feels_c = current["FeelsLikeC"]
     humidity = current["humidity"]
     desc = current["weatherDesc"][0]["value"]
     code = current["weatherCode"]
-    
+
     today_max = today["maxtempC"]
     today_min = today["mintempC"]
     tmr_max = tomorrow["maxtempC"]
     tmr_min = tomorrow["mintempC"]
     tmr_code = tomorrow["hourly"][4]["weatherCode"]
     tmr_desc = WEATHER_CODES.get(tmr_code, ("?", "(?)"))[0]
-    
+
     icon = WEATHER_CODES.get(code, ("?", "(?)"))[1]
     short_desc = WEATHER_CODES.get(code, (desc[:10], ""))[0]
-    
+
     now = datetime.now()
     date_str = now.strftime("%a %d %b")
     time_str = now.strftime("%H:%M")
-    
+
     return {
         "temp": temp_c,
         "feels": feels_c,
@@ -111,8 +113,9 @@ def format_weather(data):
         "location": LOCATION,
     }
 
+
 def build_pico_script(w):
-    return f'''from picographics import PicoGraphics, DISPLAY_INKY_PACK
+    return f"""from picographics import PicoGraphics, DISPLAY_INKY_PACK
 from pimoroni import Button
 
 display = PicoGraphics(display=DISPLAY_INKY_PACK)
@@ -169,22 +172,27 @@ display.line(0, H - 4, W, H - 4)
 
 display.update()
 print("done")
-'''
+"""
+
 
 def push_to_pico(script_path, device):
     print("Uploading to Pico...")
     result = subprocess.run(
         MPREMOTE + ["connect", device, "cp", script_path, ":main.py"],
-        capture_output=True, text=True, timeout=30
+        capture_output=True,
+        text=True,
+        timeout=30,
     )
     if result.returncode != 0:
         print("Upload error:", result.stderr)
         return False
-    
+
     print("Running on Pico...")
     result = subprocess.run(
         MPREMOTE + ["connect", device, "run", script_path],
-        capture_output=True, text=True, timeout=60
+        capture_output=True,
+        text=True,
+        timeout=60,
     )
     print("Output:", result.stdout)
     if result.returncode != 0:
@@ -192,10 +200,11 @@ def push_to_pico(script_path, device):
         return False
     return True
 
+
 def main():
     loc = LOCATION if len(sys.argv) < 2 else sys.argv[1]
     print(f"Fetching weather for {loc}...")
-    
+
     try:
         data = get_weather(loc)
         w = format_weather(data)
@@ -203,17 +212,18 @@ def main():
     except Exception as e:
         print(f"Weather fetch failed: {e}")
         return 1
-    
+
     script = build_pico_script(w)
     script_path = "/tmp/pico_weather_run.py"
     with open(script_path, "w") as f:
         f.write(script)
-    
+
     if push_to_pico(script_path, DEVICE):
         print("Display updated!")
         return 0
     else:
         return 1
+
 
 if __name__ == "__main__":
     sys.exit(main())

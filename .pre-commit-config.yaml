@@ -1,0 +1,40 @@
+repos:
+  # ── General file hygiene ──────────────────────────────────────────────────
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-json
+      - id: check-added-large-files
+        args: ["--maxkb=200"]
+      - id: check-merge-conflict
+      - id: debug-statements
+        files: ^pico_weather/
+
+  # ── Python formatter ─────────────────────────────────────────────────────
+  - repo: https://github.com/psf/black
+    rev: 25.1.0
+    hooks:
+      - id: black
+        files: ^pico_weather/
+        language_version: python3
+
+  # ── Import sorting ────────────────────────────────────────────────────────
+  - repo: https://github.com/PyCQA/isort
+    rev: 6.0.1
+    hooks:
+      - id: isort
+        files: ^pico_weather/
+        args: ["--profile", "black"]
+
+  # ── Run tests ────────────────────────────────────────────────────────────
+  - repo: local
+    hooks:
+      - id: pico-weather-tests
+        name: Pico Weather Unit Tests (42)
+        entry: python3 pico_weather/test_pico_main.py
+        language: system
+        pass_filenames: false
+        always_run: true
