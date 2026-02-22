@@ -2,7 +2,7 @@
 Standalone weather display — Pimoroni Pico Inky Pack (296x128)
 UK map embedded (correct Mercator proportions, letterboxed). Single file.
 """
-import network, urequests, time, gc
+import network, urequests, time, gc, math
 from picographics import PicoGraphics, DISPLAY_INKY_PACK
 from machine import Pin
 import jpegdec
@@ -80,6 +80,24 @@ def get_weather(lat, lon):
 def deg_to_compass(deg):
     dirs = ["N","NE","E","SE","S","SW","W","NW"]
     return dirs[int((deg + 22.5) / 45) % 8]
+
+def draw_wind_arrow(display, cx, cy, deg, size=7):
+    """Draw arrow showing wind direction (deg = direction wind blows FROM)."""
+    rad = math.radians(deg)
+    # arrow points in the direction wind is blowing TO (deg + 180)
+    dx = math.sin(rad)
+    dy = -math.cos(rad)
+    # shaft: tail at back, head at front
+    tx, ty = int(cx - dx * size), int(cy - dy * size)  # tail
+    hx, hy = int(cx + dx * size), int(cy + dy * size)  # head
+    display.set_pen(BLACK)
+    display.line(tx, ty, hx, hy)
+    # arrowhead: two lines at ~145° from tip
+    for offset in (145, -145):
+        ar = math.radians(deg + offset)
+        ax = int(hx + math.sin(ar) * (size // 2 + 2))
+        ay = int(hy - math.cos(ar) * (size // 2 + 2))
+        display.line(hx, hy, ax, ay)
 
 def parse_time(wt):
     try:
@@ -548,7 +566,8 @@ while True:
         tmr_desc = WMO.get(int(daily["weathercode"][1]), "?")
         date_str = parse_time(cw.get("time", ""))
         wind_spd = int(cw.get("windspeed", 0))
-        wind_dir = deg_to_compass(float(cw.get("winddirection", 0)))
+        wind_deg = float(cw.get("winddirection", 0))
+        wind_dir = deg_to_compass(wind_deg)
         rain_0   = daily["precipitation_sum"][0]   # today mm
         rain_1   = daily["precipitation_sum"][1]   # tomorrow mm
         rain_0   = "{:.1f}mm".format(rain_0) if rain_0 is not None else "--"
@@ -583,7 +602,9 @@ while True:
         display.set_font("bitmap6")
         display.text(desc, 4, 44, scale=1)
         display.text("H:{}  L:{}".format(hmax, hmin), 4, 54, scale=1)
-        display.text("{} {}km/h".format(wind_dir, wind_spd), 4, 64, scale=1)
+        draw_wind_arrow(display, 10, 69, wind_deg, size=6)
+        display.set_font("bitmap6")
+        display.text("{} {}km/h".format(wind_dir, wind_spd), 22, 64, scale=1)
         display.text("Rain:{}".format(rain_0), 4, 74, scale=1)
 
         # 5. Left: tomorrow
