@@ -4,6 +4,7 @@ UK map embedded (correct Mercator proportions, letterboxed). Single file.
 """
 import network, urequests, time, gc
 from picographics import PicoGraphics, DISPLAY_INKY_PACK
+from machine import Pin
 import jpegdec
 
 SSID     = "ASUS_E8_2G"
@@ -93,6 +94,55 @@ def show_error(display, msg):
     display.set_font("bitmap6")
     display.text(str(msg)[:42], 4, 55, scale=1)
     display.update()
+
+# ===== BUTTONS (A=GPIO12 prev, B=GPIO13 next, C=GPIO14 refresh) =====
+# PULL_UP: pressed = value() == 0
+_btn_a = Pin(12, Pin.IN, Pin.PULL_UP)
+_btn_b = Pin(13, Pin.IN, Pin.PULL_UP)
+_btn_c = Pin(14, Pin.IN, Pin.PULL_UP)
+
+def btn_pressed():
+    """Return 'a', 'b', 'c', or None (with simple debounce)."""
+    if _btn_a.value() == 0:
+        time.sleep_ms(50)
+        return 'a' if _btn_a.value() == 0 else None
+    if _btn_b.value() == 0:
+        time.sleep_ms(50)
+        return 'b' if _btn_b.value() == 0 else None
+    if _btn_c.value() == 0:
+        time.sleep_ms(50)
+        return 'c' if _btn_c.value() == 0 else None
+    return None
+
+# Preset cities: (display_name, lat, lon)  — None = auto geolocation
+PRESET_CITIES = [
+    (None,          None,    None  ),   # 0: Auto
+    ("London",     51.509, -0.118  ),
+    ("Cambridge",  52.205,  0.122  ),
+    ("Manchester", 53.481, -2.243  ),
+    ("Edinburgh",  55.953, -3.188  ),
+    ("Birmingham", 52.486, -1.890  ),
+    ("Glasgow",    55.862, -4.258  ),
+    ("Leeds",      53.801, -1.549  ),
+    ("Bristol",    51.454, -2.588  ),
+    ("Newcastle",  54.978, -1.618  ),
+]
+_CITY_FILE = "city_idx.txt"
+
+def load_city_idx():
+    try:
+        with open(_CITY_FILE) as f:
+            v = int(f.read().strip())
+            return v if 0 <= v < len(PRESET_CITIES) else 0
+    except Exception:
+        return 0
+
+def save_city_idx(idx):
+    try:
+        with open(_CITY_FILE, "w") as f:
+            f.write(str(idx))
+    except Exception:
+        pass
 
 UK_MAP = (
     b'\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00'
@@ -458,80 +508,115 @@ UK_MAP = (
 
 # ===== MAIN =====
 display = PicoGraphics(display=DISPLAY_INKY_PACK)
+city_idx = load_city_idx()
 
-try:
-    display.set_pen(WHITE); display.clear()
-    display.set_pen(BLACK); display.set_font("bitmap8")
-    display.text("Connecting...", 10, 55, scale=1)
-    display.update()
+# Show boot splash
+display.set_pen(WHITE); display.clear()
+display.set_pen(BLACK); display.set_font("bitmap8")
+display.text("Connecting...", 10, 55, scale=1)
+display.update()
 
-    if not connect_wifi():
-        show_error(display, "WiFi failed"); raise SystemExit
+if not connect_wifi():
+    show_error(display, "WiFi failed")
+    raise SystemExit
 
-    lat, lon, city = get_location()
-    data     = get_weather(lat, lon)
-    cw       = data["current_weather"]
-    daily    = data["daily"]
-
-    temp     = int(cw["temperature"])
-    desc     = WMO.get(int(cw["weathercode"]), "?")
-    hmax     = int(daily["temperature_2m_max"][0])
-    hmin     = int(daily["temperature_2m_min"][0])
-    tmax     = int(daily["temperature_2m_max"][1])
-    tmin     = int(daily["temperature_2m_min"][1])
-    tmr_desc = WMO.get(int(daily["weathercode"][1]), "?")
-    date_str = parse_time(cw.get("time", ""))
-    gc.collect()
-
-    # --- DRAW ---
-    display.set_pen(WHITE); display.clear()
-
-    # 1. UK map (correct proportions, letterboxed)
-    j = jpegdec.JPEG(display)
-    j.open_RAM(UK_MAP)
-    j.decode(MAP_X, MAP_Y)
-
-    # 2. Mask left panel
-    display.set_pen(WHITE); display.rectangle(0, 0, MAP_X, 128)
-
-    # 3. Header
-    display.set_pen(BLACK); display.rectangle(0, 0, 296, 14)
-    display.set_pen(WHITE); display.set_font("bitmap6")
-    display.text(city[:14], 3, 4, scale=1)
-    display.text(date_str, 200, 4, scale=1)
-
-    # 4. Left: today
-    display.set_pen(BLACK); display.set_font("bitmap8")
-    display.text("{}C".format(temp), 4, 18, scale=3)
-    display.set_font("bitmap6")
-    display.text(desc, 4, 58, scale=1)
-    display.text("H:{}  L:{}".format(hmax, hmin), 4, 70, scale=1)
-
-    # 5. Left: tomorrow
-    display.set_pen(BLACK); display.line(4, 84, 143, 84)
-    display.set_font("bitmap8"); display.text("Tmr", 4, 90, scale=1)
-    display.set_font("bitmap6")
-    display.text(tmr_desc, 4, 104, scale=1)
-    display.text("H:{}  L:{}".format(tmax, tmin), 4, 115, scale=1)
-
-    # 6. Divider
-    display.set_pen(BLACK); display.line(148, 14, 148, 127)
-
-    # 7. Location dot
-    if city in CITY_DOTS:
-        dx, dy = CITY_DOTS[city]
-    else:
-        dx, dy = latlon_to_dot(lat, lon)
-    display.set_pen(BLACK); display.circle(dx, dy, 5)
-    display.set_pen(WHITE); display.circle(dx, dy, 2)
-    display.set_pen(BLACK)
-
-    display.line(0, 127, 295, 127)
-    display.update()
-
-except Exception as e:
+while True:
     try:
-        show_error(display, e)
-    except Exception:
-        pass
-    raise
+        # Resolve city
+        preset = PRESET_CITIES[city_idx]
+        if preset[0] is None:
+            lat, lon, city = get_location()
+        else:
+            city, lat, lon = preset[0], preset[1], preset[2]
+            # still need connect to fetch weather
+            connect_wifi()
+
+        data     = get_weather(lat, lon)
+        cw       = data["current_weather"]
+        daily    = data["daily"]
+
+        temp     = int(cw["temperature"])
+        desc     = WMO.get(int(cw["weathercode"]), "?")
+        hmax     = int(daily["temperature_2m_max"][0])
+        hmin     = int(daily["temperature_2m_min"][0])
+        tmax     = int(daily["temperature_2m_max"][1])
+        tmin     = int(daily["temperature_2m_min"][1])
+        tmr_desc = WMO.get(int(daily["weathercode"][1]), "?")
+        date_str = parse_time(cw.get("time", ""))
+        gc.collect()
+
+        # --- DRAW ---
+        display.set_pen(WHITE); display.clear()
+
+        # 1. UK map
+        j = jpegdec.JPEG(display)
+        j.open_RAM(UK_MAP)
+        j.decode(MAP_X, MAP_Y)
+
+        # 2. Mask left panel
+        display.set_pen(WHITE); display.rectangle(0, 0, MAP_X, 128)
+
+        # 3. Header — show city name + page indicator + time
+        display.set_pen(BLACK); display.rectangle(0, 0, 296, 14)
+        display.set_pen(WHITE); display.set_font("bitmap6")
+        # City label: show preset name or auto-resolved name
+        label = city[:14]
+        display.text(label, 3, 4, scale=1)
+        # Page indicator e.g. "2/10"
+        page_str = "{}/{}".format(city_idx, len(PRESET_CITIES) - 1) if city_idx > 0 else "Auto"
+        display.text(page_str, 160, 4, scale=1)
+        display.text(date_str[6:] if len(date_str) > 6 else date_str, 220, 4, scale=1)
+
+        # 4. Left: today
+        display.set_pen(BLACK); display.set_font("bitmap8")
+        display.text("{}C".format(temp), 4, 18, scale=3)
+        display.set_font("bitmap6")
+        display.text(desc, 4, 58, scale=1)
+        display.text("H:{}  L:{}".format(hmax, hmin), 4, 70, scale=1)
+
+        # 5. Left: tomorrow
+        display.set_pen(BLACK); display.line(4, 84, 143, 84)
+        display.set_font("bitmap8"); display.text("Tmr", 4, 90, scale=1)
+        display.set_font("bitmap6")
+        display.text(tmr_desc, 4, 104, scale=1)
+        display.text("H:{}  L:{}".format(tmax, tmin), 4, 115, scale=1)
+
+        # 6. Divider
+        display.set_pen(BLACK); display.line(148, 14, 148, 127)
+
+        # 7. Location dot
+        if city in CITY_DOTS:
+            dx, dy = CITY_DOTS[city]
+        else:
+            dx, dy = latlon_to_dot(lat, lon)
+        display.set_pen(BLACK); display.circle(dx, dy, 5)
+        display.set_pen(WHITE); display.circle(dx, dy, 2)
+        display.set_pen(BLACK)
+
+        display.line(0, 127, 295, 127)
+        display.update()
+
+    except Exception as e:
+        try:
+            show_error(display, e)
+        except Exception:
+            pass
+        time.sleep(30)
+        continue
+
+    # --- BUTTON POLL (wait up to 30 min, then auto-refresh) ---
+    deadline = time.time() + 1800
+    while time.time() < deadline:
+        btn = btn_pressed()
+        if btn == 'a':
+            city_idx = (city_idx - 1) % len(PRESET_CITIES)
+            save_city_idx(city_idx)
+            break
+        elif btn == 'b':
+            city_idx = (city_idx + 1) % len(PRESET_CITIES)
+            save_city_idx(city_idx)
+            break
+        elif btn == 'c':
+            break   # refresh current city
+        time.sleep_ms(100)
+    # loop → re-fetch and redraw
