@@ -22,11 +22,20 @@
 | Christmas | 3 | 11 days (Dec 22-Jan 1) | Take Dec 22-24 |
 | **Total** | **27** | | Adjust to fit 25 — drop 2 days from summer |
 
-## Leys School Terms (to be updated from calendar scrape)
-- Lent Term: Jan - Mar
-- Summer Term: Apr - Jul
-- Michaelmas Term: Sep - Dec
-- Half terms, Exeats, Live Weekends: TBD from calendar
+## Leys School Terms (scraped 2026-02-27)
+- Lent Term: Jan - 27 Mar (pupils leave 13:30)
+- Easter Holidays: 28 Mar - ~15 Apr (confirm return date)
+- Summer Term: mid-Apr - Jul
+
+### ⚠️ CRITICAL: Leys Saturday Rule
+- **DEFAULT: 周六上午上课** — calendar上不会特别标注
+- 只有标注 "Leave Weekend" 或 "Exeat" 的周六才不用上课
+- 如果calendar上某个周六什么都没写 → 南南必须去学校
+- 推荐周六全天活动前必须确认是否是Leave Weekend/Exeat
+- 周六下午活动OK（课一般中午结束）
+
+### Term Date Confirmed
+- Half terms, Exeats, Live Weekends: check calendar weekly for explicit "Leave Weekend" tags
 
 ## BE Tournament Season
 - Indoor season: Sep - Apr

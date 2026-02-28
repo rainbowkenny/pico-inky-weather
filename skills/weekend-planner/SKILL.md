@@ -1,5 +1,5 @@
 ---
-name: cc
+name: weekend-planner
 description: |
   Family weekend and holiday planner for S's family (Cambridge, UK). Use when:
   - Planning weekends, holidays, or family activities
@@ -29,9 +29,17 @@ description: |
 - Script: `scripts/scrape_leys.py`
 
 ### 2. Badminton England Tournaments
-- URL: https://be.tournamentsoftware.com/
-- Filter: Bronze level, U15, within 2.5h travel
+- Primary: https://be.tournamentsoftware.com/ (blocked by cookie wall)
+- Fallback: https://www.badmintonengland.co.uk/tournaments/
+- Filter: Bronze/Silver/Gold level ONLY, U15, within 2.5h travel (exclude "Futures", "Other" category tournaments)
+- Deadline: MUST use "Closing deadline" (报名截止), NOT "Withdrawal deadline" (退赛截止). Click into each tournament detail page to get accurate closing deadline.
+- Each listing must include: name, date, venue, level, closing deadline, entry link (https://be.tournamentsoftware.com/sport/tournament?id=xxx)
 - Script: `scripts/scrape_be_tournaments.py`
+- Strategy:
+  1. Weekly web_fetch attempt on BE sites (tournamentsoftware + badmintonengland.co.uk)
+  2. When browser relay is available → auto-upgrade to full scraping past cookie wall
+  3. Always search web for "badminton england bronze U15 tournament 2026" as backup
+- Check browser relay status: if openclaw browser extension connected, use browser tool to navigate tournamentsoftware.com directly
 
 ### 3. Events & Activities
 - Cambridge: Arts Theatre, ADC, Corn Exchange, Fitzwilliam, Kettle's Yard, Science Centre
@@ -80,12 +88,18 @@ description: |
 ```
 
 ## Constraints
-- Saturday school day → plan afternoon + Sunday only
+- Saturday school day → Leys DEFAULT is Saturday morning school. Calendar will NOT show this. Only if "Leave Weekend" or "Exeat" is explicitly tagged on the calendar is Saturday free. If nothing is marked → assume Saturday morning school → only plan afternoon + Sunday
 - Live Weekend / Exeat → full two days
 - Daughter gymnastics/sleepover → check Google Cal, exclude conflicts
 - BE tournament registration deadlines → remind 3 days before
 - Both kids ages (10+13) → activities must suit both
 - Seasonal awareness (weather, daylight, school terms)
+- **AUTO CONFLICT CHECK (mandatory before including any activity/tournament):**
+  1. Check Leys School calendar (browser → theleys.net) for Saturday Timetable, school events, exams on that date
+  2. Check Google Calendar (both 主日历 + Family) for existing plans on that date
+  3. If ANY conflict found → exclude from report, do not recommend
+  4. If borderline (e.g. afternoon event but morning tournament) → include with ⚠️ conflict note
+  5. Log excluded items at bottom of report: "已排除(冲突): [item] — 原因: [conflict]"
 
 ## References
 - `references/family-profile.md` — detailed preferences and history

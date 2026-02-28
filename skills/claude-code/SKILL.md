@@ -20,24 +20,38 @@ This keeps the conversation clean and leverages Claude Code's agent teams, tool 
 - Path: `/home/albert/.local/bin/claude`
 - Version: 2.1.61
 
+## Project Structure
+
+**All coding tasks MUST run in a dedicated project folder under the workspace.**
+
+```
+/home/albert/.openclaw/workspace/
+├── projects/
+│   ├── weekend-planner/     # Weekend planner scripts
+│   ├── market-intel/        # Market data scrapers
+│   └── <project-name>/     # Each task gets its own folder
+```
+
+- Create `projects/<name>/` before starting any coding task
+- Pass the project dir as working directory to Claude Code
+- Never scatter scripts across random /tmp or top-level paths
+
 ## How to Execute Tasks
 
 ### Simple task (one-shot, background)
 ```bash
+mkdir -p /home/albert/.openclaw/workspace/projects/<project-name>
 claude -p "task description" \
   --allowedTools "Bash Edit Read Write" \
   --print \
+  --add-dir /home/albert/.openclaw/workspace/projects/<project-name> \
   2>&1 &
 ```
 
 ### Task with specific model
 ```bash
-claude -p "task description" --model opus
-```
-
-### Task with custom working directory
-```bash
-claude -p "task description" --add-dir /path/to/project
+claude -p "task description" --model opus \
+  --add-dir /home/albert/.openclaw/workspace/projects/<project-name>
 ```
 
 ## Agent Teams
@@ -113,6 +127,48 @@ exec: claude -p "Build the weekend-planner BE tournament scraper" \
 | `--add-dir <dir>` | Add directory access |
 | `--max-budget-usd <n>` | Cost cap |
 | `--effort <level>` | low/medium/high |
+
+## Error Handling & Notifications
+
+When a Claude Code task fails, gets stuck, or produces unexpected errors:
+
+1. **Retry once** if the error looks transient (timeout, network)
+2. **If still failing**, send a notification to the hooks group with details:
+
+```
+message(action=send, target="5252093122", channel="telegram",
+  message="⚠️ Claude Code Task Failed\n\nTask: <brief description>\nError: <error message>\nStatus: <what happened>\n\nNext steps: <suggestion>")
+```
+
+### What to report:
+- Task execution failures (non-zero exit, crash)
+- Timeout / hung processes
+- Permission errors
+- Unexpected output or missing files
+- Any blocker that prevents completing user's request
+- ✅ **Task completion summaries** — always send a brief summary when a task finishes successfully
+
+### Format:
+```
+⚠️ Claude Code Task Failed
+
+Task: <what was being done>
+Error: <error details>
+Status: <stuck / failed / partial>
+Next steps: <what to try or what user needs to do>
+```
+
+### Success summary format:
+```
+✅ Task Complete
+
+Task: <what was done>
+Result: <brief outcome>
+Files: <created/modified files if any>
+Agent Team: <yes/no — if yes, list agent names and roles used>
+Model: <which model was used>
+Budget: <actual spend vs limit>
+```
 
 ## Safety
 - Always use `--max-budget-usd` for expensive tasks
