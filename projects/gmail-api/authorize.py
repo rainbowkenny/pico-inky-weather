@@ -20,11 +20,14 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 DIR = os.path.dirname(os.path.abspath(__file__))
 CREDENTIALS_FILE = "/home/albert/.openclaw/workspace/credentials/google_credentials.json"
 TOKEN_FILE = os.path.join(DIR, "token.json")
-SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
+SCOPES = [
+    "https://www.googleapis.com/auth/gmail.readonly",
+    "https://www.googleapis.com/auth/gmail.send",
+]
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Authorize Gmail API (read-only)")
+    parser = argparse.ArgumentParser(description="Authorize Gmail API (read + send)")
     parser.add_argument(
         "--force", action="store_true", help="Re-authorize even if token.json exists"
     )
@@ -50,7 +53,7 @@ def main():
     print("\n=== Gmail API Authorization ===\n")
     print("1. Open this URL in a browser:\n")
     print(f"   {auth_url}\n")
-    print("2. Sign in and grant read-only Gmail access.")
+    print("2. Sign in and grant Gmail read + send access.")
     print("3. Copy the authorization code and paste it below.\n")
 
     code = input("Authorization code: ").strip()
@@ -65,7 +68,7 @@ def main():
         f.write(creds.to_json())
 
     print(f"\nToken saved to {TOKEN_FILE}")
-    print("You can now use list_messages.py and read_message.py.")
+    print("You can now use list_messages.py, read_message.py, and send_email.py.")
 
 
 if __name__ == "__main__":

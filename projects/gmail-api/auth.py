@@ -9,7 +9,10 @@ from google.auth.transport.requests import Request
 DIR = os.path.dirname(os.path.abspath(__file__))
 CREDENTIALS_FILE = "/home/albert/.openclaw/workspace/credentials/google_credentials.json"
 TOKEN_FILE = os.path.join(DIR, "token.json")
-SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
+SCOPES = [
+    "https://www.googleapis.com/auth/gmail.readonly",
+    "https://www.googleapis.com/auth/gmail.send",
+]
 
 
 def get_credentials():
