@@ -3,7 +3,8 @@
 Gmail API OAuth2 authorization (headless-friendly).
 
 Generates an authorization URL, prompts you to visit it in a browser,
-then exchanges the authorization code for a token stored in token.json.
+then exchanges the authorization code for a token stored at the shared
+credentials path (see auth.py TOKEN_FILE).
 
 Usage:
     python3 authorize.py
@@ -12,22 +13,15 @@ Usage:
 
 import argparse
 import os
-import json
 import sys
 
 from google_auth_oauthlib.flow import InstalledAppFlow
 
-DIR = os.path.dirname(os.path.abspath(__file__))
-CREDENTIALS_FILE = "/home/albert/.openclaw/workspace/credentials/google_credentials.json"
-TOKEN_FILE = os.path.join(DIR, "token.json")
-SCOPES = [
-    "https://www.googleapis.com/auth/gmail.readonly",
-    "https://www.googleapis.com/auth/gmail.send",
-]
+from auth import CREDENTIALS_FILE, TOKEN_FILE, SCOPES
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Authorize Gmail API (read + send)")
+    parser = argparse.ArgumentParser(description="Authorize Gmail API (read/send/modify)")
     parser.add_argument(
         "--force", action="store_true", help="Re-authorize even if token.json exists"
     )
@@ -53,7 +47,7 @@ def main():
     print("\n=== Gmail API Authorization ===\n")
     print("1. Open this URL in a browser:\n")
     print(f"   {auth_url}\n")
-    print("2. Sign in and grant Gmail read + send access.")
+    print("2. Sign in and grant Gmail read/send/modify access.")
     print("3. Copy the authorization code and paste it below.\n")
 
     code = input("Authorization code: ").strip()

@@ -2,9 +2,9 @@
 
 Gmail API scripts using OAuth 2.0 for project `sylvan-storm-488713-f3`.
 
-> **Warning — Send permission:** This project requests `gmail.send` scope,
-> which allows sending email as your account. Review `send_email.py` before
-> use and keep `token.json` secure.
+> **Warning — Send/Modify permission:** This project requests `gmail.send` and
+> `gmail.modify` scopes, which allow sending email and modifying labels/state.
+> Review scripts before use and keep the token file secure.
 
 ## Setup
 
@@ -35,27 +35,44 @@ pip install -r requirements.txt
 
 ### 4. Authorize
 
-Run the OAuth flow to generate `token.json`:
+Run the OAuth flow to generate the shared token:
 
 ```bash
 python3 authorize.py
 ```
 
-This prints an authorization URL. Open it in a browser, sign in, grant Gmail read + send access, then paste the authorization code back into the terminal. A `token.json` file is saved locally.
+This prints an authorization URL. Open it in a browser, sign in, grant Gmail read/send/modify access, then paste the authorization code back into the terminal. The token is saved to the shared credentials path:
+
+```
+/home/albert/.openclaw/workspace/credentials/google_token.json
+```
 
 Use `--force` to re-authorize if needed.
 
 ### 5. Re-authorization (scope changes)
 
-If you previously authorized with read-only scope, you **must** re-authorize
-to pick up the new `gmail.send` scope:
+If you previously authorized with fewer scopes, you **must** re-authorize
+to pick up the new scopes (e.g. `gmail.modify`):
 
 ```bash
 python3 authorize.py --force
 ```
 
-This replaces `token.json` with a new token that includes send permission.
-Without this step, `send_email.py` will fail with a 403 insufficient-permissions error.
+This replaces the token with one that includes all required permissions.
+Without this step, scripts may fail with a 403 insufficient-permissions error.
+
+### Migration from old token path
+
+Earlier versions stored the token at `./token.json` inside the project
+directory. The token is now stored at the shared path:
+
+```
+/home/albert/.openclaw/workspace/credentials/google_token.json
+```
+
+If you have an old `./token.json`, re-authorize with `python3 authorize.py --force`
+and delete the old file. All Google integrations (Gmail, Calendar, etc.) now
+share this single token location.
 
 ### 6. Use
 
@@ -88,16 +105,17 @@ If `--body` is omitted, the script reads from stdin (type message, then Ctrl-D).
 | File | Purpose |
 |---|---|
 | `auth.py` | Shared auth helper — loads/refreshes credentials, builds Gmail service |
-| `authorize.py` | Runs headless-friendly OAuth flow, produces `token.json` |
+| `authorize.py` | Runs headless-friendly OAuth flow, produces shared `credentials/google_token.json` |
 | `list_messages.py` | Lists recent messages (id, subject, from, date) |
 | `read_message.py` | Prints headers + body/snippet for a given message ID |
 | `send_email.py` | Sends a plain-text email (to, subject, body) |
+| `google_healthcheck.py` | Validates token, scopes, expiry, and Gmail connectivity |
 | `requirements.txt` | Python dependencies |
 
 ## Credentials
 
 - **`credentials/google_credentials.json`** — OAuth client secret (downloaded from GCP, do not commit)
-- **`token.json`** — Generated access/refresh token (do not commit)
+- **`credentials/google_token.json`** — Generated access/refresh token shared by all Google integrations (do not commit)
 
 ## Scopes
 
@@ -105,3 +123,11 @@ If `--body` is omitted, the script reads from stdin (type message, then Ctrl-D).
 |---|---|
 | `gmail.readonly` | Read messages and metadata |
 | `gmail.send` | Send email on behalf of the user |
+| `gmail.modify` | Modify labels, mark read/unread, archive |
+
+### Healthcheck
+
+```bash
+python3 google_healthcheck.py           # full check (token + live API)
+python3 google_healthcheck.py --dry-run # token/scope check only
+```
