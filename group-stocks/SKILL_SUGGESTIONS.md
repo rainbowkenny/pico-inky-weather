@@ -1,7 +1,6 @@
 # Skill Suggestions for Stock Analysis Agent
 
 ## Core (copied)
-- weekend-planner (adapt patterns for schedule/event conflict checks)
 - claude-code (agentic coding workflows)
 
 ## Recommended to install/use
