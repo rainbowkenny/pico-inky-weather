@@ -58,7 +58,12 @@ description: |
 - Read: avoid conflicts (daughter's gymnastics, sleepovers, existing plans)
 - Write: confirmed activities → auto-add to calendar
 
-### 5. UK Bank Holidays & School Holidays
+### 5. Gmail School Mail Scan (daily)
+- Scan school emails (St Faith's / SchoolPost / Leys) for actionable schedule details (time + place + activity)
+- Auto-create events in Family Calendar without waiting for manual confirmation
+- Script: `projects/weekend-planner/gmail_to_family_calendar.py`
+
+### 6. UK Bank Holidays & School Holidays
 - Bank Holidays: gov.uk API
 - Optimise annual leave (25 days) around long weekends
 - Easter / Half Term / Summer → longer trip windows

@@ -254,27 +254,37 @@ def main():
     _log(f"RUN START weekend={saturday}..{sunday}")
 
     # 1. Fetch calendar
-    _log("STEP [1/5] START gcal_fetch")
+    _log("STEP [1/6] START gcal_fetch")
     t0 = time.monotonic()
     gcal_script = os.path.join(SCRIPT_DIR, "gcal_fetch.py")
     gcal_data = run_script(gcal_script, "--days", "14")
     s1 = time.monotonic() - t0
     outcome = "ok" if gcal_data.get("status") != "error" else "error"
-    _log(f"STEP [1/5] END   gcal_fetch elapsed={s1:.1f}s outcome={outcome}")
+    _log(f"STEP [1/6] END   gcal_fetch elapsed={s1:.1f}s outcome={outcome}")
     _step_timings.append(("gcal_fetch", s1, outcome))
 
     # 2. Scrape events
-    _log("STEP [2/5] START scrape_events")
+    _log("STEP [2/6] START scrape_events")
     t0 = time.monotonic()
     events_script = os.path.join(SCRIPT_DIR, "scrape_events.py")
     events_data = run_script(events_script, "--weekend", saturday)
     s2 = time.monotonic() - t0
     outcome = "ok" if events_data.get("status") != "error" else "error"
-    _log(f"STEP [2/5] END   scrape_events elapsed={s2:.1f}s outcome={outcome}")
+    _log(f"STEP [2/6] END   scrape_events elapsed={s2:.1f}s outcome={outcome}")
     _step_timings.append(("scrape_events", s2, outcome))
 
-    # 3. Scrape tournaments (with prewarm diagnostics)
-    _log("STEP [3/5] START scrape_be_tournaments")
+    # 3. Gmail scan -> auto-add family calendar
+    _log("STEP [3/6] START gmail_to_family_calendar")
+    t0 = time.monotonic()
+    gmail_scan_script = os.path.join(SCRIPT_DIR, "gmail_to_family_calendar.py")
+    gmail_scan_data = run_script(gmail_scan_script, timeout=45)
+    s3a = time.monotonic() - t0
+    outcome = "ok" if gmail_scan_data.get("status") != "error" else "error"
+    _log(f"STEP [3/6] END   gmail_to_family_calendar elapsed={s3a:.1f}s outcome={outcome}")
+    _step_timings.append(("gmail_to_family_calendar", s3a, outcome))
+
+    # 4. Scrape tournaments (with prewarm diagnostics)
+    _log("STEP [4/6] START scrape_be_tournaments")
     t0 = time.monotonic()
     be_script = os.path.join(SCRIPT_DIR, "scrape_be_tournaments.py")
     be_data = run_script(be_script, timeout=30)
@@ -286,24 +296,24 @@ def main():
         outcome = f"partial:{be_error_code}"
     else:
         outcome = "ok"
-    _log(f"STEP [3/5] END   scrape_be_tournaments elapsed={s3:.1f}s outcome={outcome}")
+    _log(f"STEP [4/6] END   scrape_be_tournaments elapsed={s3:.1f}s outcome={outcome}")
     _step_timings.append(("scrape_be_tournaments", s3, outcome))
 
-    # 4. Leys calendar
-    _log("STEP [4/5] START scrape_leys")
+    # 5. Leys calendar
+    _log("STEP [5/6] START scrape_leys")
     t0 = time.monotonic()
     leys_data = run_script(LEYS_SCRIPT, "--weeks", "4", timeout=30)
     s4 = time.monotonic() - t0
     outcome = "ok" if leys_data.get("status") != "error" else "error"
-    _log(f"STEP [4/5] END   scrape_leys elapsed={s4:.1f}s outcome={outcome}")
+    _log(f"STEP [5/6] END   scrape_leys elapsed={s4:.1f}s outcome={outcome}")
     _step_timings.append(("scrape_leys", s4, outcome))
 
-    # 5. Weather
-    _log("STEP [5/5] START fetch_weather")
+    # 6. Weather
+    _log("STEP [6/6] START fetch_weather")
     t0 = time.monotonic()
     weather_summary, weather_emoji = fetch_weather("Cambridge")
     s5 = time.monotonic() - t0
-    _log(f"STEP [5/5] END   fetch_weather elapsed={s5:.1f}s outcome=ok")
+    _log(f"STEP [6/6] END   fetch_weather elapsed={s5:.1f}s outcome=ok")
     _step_timings.append(("fetch_weather", s5, "ok"))
 
     # --- Build options ---
