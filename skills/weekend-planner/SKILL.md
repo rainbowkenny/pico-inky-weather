@@ -48,6 +48,7 @@ description: |
 - Theme parks: Thorpe Park, Legoland, Wicksteed, Pleasurewood Hills
 - Shopping: Bicester Village, Cambridge/London markets
 - Sports: Cambridge United, local tournaments, climbing, trampolining, ice skating
+- Sailing: London Sailing Club events (https://www.londonsailing.club/)
 - Festivals: food, craft, seasonal, fireworks
 - Eventbrite, Time Out London, VisitEngland, local listings
 - Script: `scripts/scrape_events.py`
