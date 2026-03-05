@@ -273,13 +273,19 @@ def main():
     _log(f"STEP [2/5] END   scrape_events elapsed={s2:.1f}s outcome={outcome}")
     _step_timings.append(("scrape_events", s2, outcome))
 
-    # 3. Scrape tournaments
+    # 3. Scrape tournaments (with prewarm diagnostics)
     _log("STEP [3/5] START scrape_be_tournaments")
     t0 = time.monotonic()
     be_script = os.path.join(SCRIPT_DIR, "scrape_be_tournaments.py")
     be_data = run_script(be_script, timeout=30)
     s3 = time.monotonic() - t0
-    outcome = "ok" if be_data.get("status") != "error" else "error"
+    be_error_code = be_data.get("error_code")  # cookie_blocked|browser_unavailable|site_unreachable|parse_failed
+    if be_data.get("status") == "error":
+        outcome = be_error_code or "error"
+    elif be_error_code:
+        outcome = f"partial:{be_error_code}"
+    else:
+        outcome = "ok"
     _log(f"STEP [3/5] END   scrape_be_tournaments elapsed={s3:.1f}s outcome={outcome}")
     _step_timings.append(("scrape_be_tournaments", s3, outcome))
 
@@ -319,7 +325,16 @@ def main():
     elif be_data.get("status") != "error":
         options.append("🏸 选项1: 本周末暂无附近U15青少年赛事")
     else:
-        options.append(f"🏸 选项1: 羽毛球赛事数据获取失败")
+        # Classified failure labels for diagnostics
+        _err_labels = {
+            "cookie_blocked": "赛事网站被Cookie墙拦截",
+            "browser_unavailable": "浏览器不可用",
+            "site_unreachable": "赛事网站无法访问",
+            "parse_failed": "赛事数据解析失败",
+        }
+        _label = _err_labels.get(be_error_code, "赛事数据获取失败")
+        _log(f"BE_FAILURE error_code={be_error_code}")
+        options.append(f"🏸 选项1: {_label}")
 
     # Option 2: Events/shows
     events = pick_best_events(events_data, n=3)
