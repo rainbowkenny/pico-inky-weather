@@ -374,6 +374,22 @@ def main():
             "🌿"
         ))
 
+    # Always surface London Sailing Club monitor item when available
+    sailing = None
+    if events_data and events_data.get("status") != "error":
+        for ev in events_data.get("events", []):
+            if ev.get("source") == "london_sailing_club":
+                sailing = ev
+                break
+    if sailing:
+        options.append(format_option(
+            "⛵ London Sailing Club（监控）",
+            sailing.get("venue", "London Sailing Club"),
+            sailing.get("price", "check website"),
+            sailing.get("travel_time", "~1h15m by train"),
+            "⛵"
+        ))
+
     # --- Build and print message ---
     school_status = get_school_status(saturday, leys_data)
     gcal_events = format_gcal_events(gcal_data, saturday, sunday)
