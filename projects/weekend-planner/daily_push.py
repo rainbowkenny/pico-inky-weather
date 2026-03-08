@@ -17,7 +17,7 @@ import urllib.request
 from datetime import datetime, timedelta
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-LEYS_SCRIPT = "/home/albert/.openclaw/workspace/skills/cc/scripts/scrape_leys.py"
+LEYS_SCRIPT = "/home/albert/.openclaw/workspace/skills/weekend-planner/scripts/scrape_leys.py"
 
 WTTR_URL = "https://wttr.in/Cambridge?format=j1"
 
