@@ -1,21 +1,33 @@
 # Google Calendar Integration
 
-## Credentials
-- Auth script: `/home/albert/.openclaw/workspace/credentials/google_auth.py`
-- Credentials: `/home/albert/.openclaw/workspace/credentials/google_credentials.json`
-- Token: `/home/albert/.openclaw/workspace/credentials/google_token.json`
-- Token auto-refreshes via refresh_token
+## Authentication — Service Account (permanent)
+- **SA email**: `luka-calendar-bot@sylvan-storm-488713-f3.iam.gserviceaccount.com`
+- **Key file**: `credentials/service_account.json`
+- **Shared module**: `credentials/gcal_auth.py`
+- **No expiry** — no refresh tokens to manage
+
+### Usage
+```python
+import sys
+sys.path.insert(0, "/home/albert/.openclaw/workspace/group-5029853637/credentials")
+from gcal_auth import get_headers, get_credentials, CAL_PRIMARY, CAL_FAMILY, health_check
+```
 
 ## Tracked Calendars
 
-| Calendar | ID | Purpose |
-|----------|----|---------|
-| 主日历 | `hang.shuojin@gmail.com` | S的个人日程 |
-| Family | `family03011953462043037676@group.calendar.google.com` | 家庭活动 |
+| Calendar | ID | Constant |
+|----------|----|----------|
+| 主日历 | `hang.shuojin@gmail.com` | `CAL_PRIMARY` |
+| Family | `family03011953462043037676@group.calendar.google.com` | `CAL_FAMILY` |
 
 Both calendars MUST be checked when planning weekends to avoid conflicts.
 
-## API Usage
-- Endpoint: `https://www.googleapis.com/calendar/v3/calendars/{calendarId}/events`
-- Auth: Bearer token from google_token.json (refresh if 401)
-- Always query both calendars for the relevant date range
+## Google Maps Places API
+- **API Key**: `(redacted)`
+- **Endpoint**: `maps.googleapis.com/maps/api/place/textsearch/json` (legacy)
+- **Free tier**: $200/month (~6000+ searches)
+- **Use for**: local service searches with ratings, reviews, parking
+
+## Legacy OAuth (deprecated, do NOT use for new scripts)
+- Old credentials in `credentials/google_credentials.json` and `credentials/google_token.json`
+- Gmail token in `projects/gmail-api/token_hang.json` (still used for Gmail API only)

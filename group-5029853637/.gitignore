@@ -1,0 +1,6 @@
+credentials/
+credentials/gcal_auth.py
+credentials/service_account.json
+projects/gmail-api/token*.json
+*.pyc
+__pycache__/

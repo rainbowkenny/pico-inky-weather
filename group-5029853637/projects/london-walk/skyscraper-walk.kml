@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+<Document>
+  <name>London Skyscraper Walk 🏙️</name>
+  <description>伦敦金融城摩天大楼徒步路线 — 11个打卡点</description>
+
+  <Style id="landmark">
+    <IconStyle><Icon><href>http://maps.google.com/mapfiles/kml/shapes/flag.png</href></Icon></IconStyle>
+  </Style>
+
+  <Placemark>
+    <name>1️⃣ Tower of London</name>
+    <description>起点 — 世界文化遗产，900年历史城堡。Crown Jewels所在地。成人£33.60，儿童£16.80</description>
+    <styleUrl>#landmark</styleUrl>
+    <Point><coordinates>-0.0761,51.5081,0</coordinates></Point>
+  </Placemark>
+
+  <Placemark>
+    <name>2️⃣ Sky Garden (Walkie Talkie)</name>
+    <description>20 Fenchurch Street — 免费空中花园，160m高。需提前预约 skygarden.london</description>
+    <styleUrl>#landmark</styleUrl>
+    <Point><coordinates>-0.0833,51.5112,0</coordinates></Point>
+  </Placemark>
+
+  <Placemark>
+    <name>3️⃣ The Cheesegrater</name>
+    <description>Leadenhall Building — 225m，独特楔形设计，从Lime Street看最壮观</description>
+    <styleUrl>#landmark</styleUrl>
+    <Point><coordinates>-0.0824,51.5134,0</coordinates></Point>
+  </Placemark>
+
+  <Placemark>
+    <name>4️⃣ The Gherkin</name>
+    <description>30 St Mary Axe — 180m，伦敦最iconic的摩天楼之一。外观拍照（不对外开放）</description>
+    <styleUrl>#landmark</styleUrl>
+    <Point><coordinates>-0.0803,51.5145,0</coordinates></Point>
+  </Placemark>
+
+  <Placemark>
+    <name>5️⃣ 22 Bishopsgate</name>
+    <description>伦敦最高办公楼 278m！免费观景台+美食市场。周末开放时间需确认</description>
+    <styleUrl>#landmark</styleUrl>
+    <Point><coordinates>-0.0828,51.5152,0</coordinates></Point>
+  </Placemark>
+
+  <Placemark>
+    <name>6️⃣ The Scalpel</name>
+    <description>52 Lime Street — 190m，锋利的刀刃造型，2018年落成</description>
+    <styleUrl>#landmark</styleUrl>
+    <Point><coordinates>-0.0815,51.5131,0</coordinates></Point>
+  </Placemark>
+
+  <Placemark>
+    <name>7️⃣ Lloyd's Building</name>
+    <description>管道和电梯全部外露的"Inside-Out Building"，Richard Rogers设计杰作</description>
+    <styleUrl>#landmark</styleUrl>
+    <Point><coordinates>-0.0826,51.5128,0</coordinates></Point>
+  </Placemark>
+
+  <Placemark>
+    <name>8️⃣ Leadenhall Market</name>
+    <description>维多利亚风格室内市场，Harry Potter对角巷取景地！美食+拍照圣地</description>
+    <styleUrl>#landmark</styleUrl>
+    <Point><coordinates>-0.0837,51.5131,0</coordinates></Point>
+  </Placemark>
+
+  <Placemark>
+    <name>🌉 Tower Bridge</name>
+    <description>Bonus — 伦敦地标塔桥，Glass Floor体验。成人£12.30</description>
+    <styleUrl>#landmark</styleUrl>
+    <Point><coordinates>-0.0754,51.5055,0</coordinates></Point>
+  </Placemark>
+
+  <Placemark>
+    <name>⛪ St Paul's Cathedral</name>
+    <description>Bonus — Christopher Wren杰作，登顶看全景。成人£25</description>
+    <styleUrl>#landmark</styleUrl>
+    <Point><coordinates>-0.0984,51.5138,0</coordinates></Point>
+  </Placemark>
+
+  <Placemark>
+    <name>🍽️ Borough Market</name>
+    <description>终点午餐站 — 伦敦最famous的美食市场。周六最热闹</description>
+    <styleUrl>#landmark</styleUrl>
+    <Point><coordinates>-0.0910,51.5055,0</coordinates></Point>
+  </Placemark>
+
+</Document>
+</kml>

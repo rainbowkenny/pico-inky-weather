@@ -9,11 +9,13 @@ Output: Formatted Chinese push message to stdout.
 import argparse
 import json
 import os
+import random
 import re
 import subprocess
 import sys
 import time
 import urllib.request
+import random
 from datetime import datetime, timedelta
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -23,12 +25,18 @@ WTTR_URL = "https://wttr.in/Cambridge?format=j1"
 
 
 def get_next_weekend():
-    """Return (saturday, sunday) as YYYY-MM-DD strings."""
+    """Return (saturday, sunday) as YYYY-MM-DD strings.
+    If today is Saturday or Sunday, return THIS weekend (not next).
+    """
     today = datetime.now()
-    days_until_sat = (5 - today.weekday()) % 7
-    if days_until_sat == 0:
-        days_until_sat = 7
-    saturday = today + timedelta(days=days_until_sat)
+    dow = today.weekday()  # Mon=0 … Sat=5, Sun=6
+    if dow == 5:  # Saturday
+        saturday = today
+    elif dow == 6:  # Sunday
+        saturday = today - timedelta(days=1)
+    else:
+        days_until_sat = (5 - dow) % 7
+        saturday = today + timedelta(days=days_until_sat)
     sunday = saturday + timedelta(days=1)
     return saturday.strftime("%Y-%m-%d"), sunday.strftime("%Y-%m-%d")
 
@@ -73,30 +81,81 @@ def run_script(script_path, *args, timeout=60):
         return {"status": "error", "reason": str(e)}
 
 
+def _wmo_to_desc(code):
+    """Map WMO weather code to (description, emoji)."""
+    mapping = {
+        0: ("Clear sky", "☀️"), 1: ("Mainly clear", "🌤️"), 2: ("Partly cloudy", "⛅"), 3: ("Overcast", "☁️"),
+        45: ("Fog", "🌫️"), 48: ("Rime fog", "🌫️"),
+        51: ("Light drizzle", "🌦️"), 53: ("Drizzle", "🌦️"), 55: ("Dense drizzle", "🌧️"),
+        61: ("Slight rain", "🌦️"), 63: ("Rain", "🌧️"), 65: ("Heavy rain", "🌧️"),
+        71: ("Slight snow", "🌨️"), 73: ("Snow", "❄️"), 75: ("Heavy snow", "❄️"),
+        80: ("Rain showers", "🌧️"), 81: ("Moderate showers", "🌧️"), 82: ("Violent showers", "🌧️"),
+        95: ("Thunderstorm", "⛈️"), 96: ("Thunderstorm+hail", "⛈️"), 99: ("Thunderstorm+hail", "⛈️"),
+    }
+    return mapping.get(code, ("Unknown", "🌤️"))
+
+
+def _fetch_weather_open_meteo():
+    """Fetch weekend weather from Open-Meteo (free, no key). Returns (summary, emoji)."""
+    today = datetime.now()
+    dow = today.weekday()
+    if dow == 5:
+        sat = today
+    elif dow == 6:
+        sat = today - timedelta(days=1)
+    else:
+        days_until_sat = (5 - dow) % 7
+        sat = today + timedelta(days=days_until_sat)
+    sat_str = sat.strftime("%Y-%m-%d")
+
+    url = (
+        f"https://api.open-meteo.com/v1/forecast?"
+        f"latitude=52.2053&longitude=0.1218"
+        f"&daily=weather_code,temperature_2m_max,temperature_2m_min"
+        f"&timezone=Europe/London&start_date={sat_str}&end_date={sat_str}"
+    )
+    req = urllib.request.Request(url)
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        data = json.loads(resp.read())
+
+    daily = data.get("daily", {})
+    t_max = daily.get("temperature_2m_max", [None])[0]
+    t_min = daily.get("temperature_2m_min", [None])[0]
+    code = daily.get("weather_code", [None])[0]
+
+    desc, emoji = _wmo_to_desc(code) if code is not None else ("Unknown", "🌤️")
+    t_min_s = f"{t_min:.0f}" if t_min is not None else "?"
+    t_max_s = f"{t_max:.0f}" if t_max is not None else "?"
+    return f"{t_min_s}–{t_max_s}°C {desc}", emoji
+
+
 def fetch_weather(location="Cambridge"):
-    """Fetch weather from wttr.in. Returns (summary, emoji) tuple."""
+    """Fetch weather: try wttr.in first, fall back to Open-Meteo."""
+    # Try wttr.in (richer data but unreliable SSL)
     try:
         url = f"https://wttr.in/{location.replace(' ', '+')}?format=j1"
         req = urllib.request.Request(url, headers={"User-Agent": "curl/7.68.0"})
-        with urllib.request.urlopen(req, timeout=10) as resp:
+        with urllib.request.urlopen(req, timeout=8) as resp:
             data = json.loads(resp.read())
 
-        # Parse weekend forecast
         forecasts = data.get("weather", [])
         if not forecasts:
-            return "天气未知", "🌤️"
+            raise ValueError("No forecast data")
 
-        # wttr.in returns up to 3 days; pick Saturday (index 0 or 1 depending on day)
         today = datetime.now()
-        days_until_sat = (5 - today.weekday()) % 7
-        # Use first available forecast
+        dow = today.weekday()
+        if dow == 5:
+            days_until_sat = 0
+        elif dow == 6:
+            days_until_sat = 0  # use today's forecast for Sunday (close enough)
+        else:
+            days_until_sat = (5 - dow) % 7
         fc = forecasts[min(days_until_sat, len(forecasts) - 1)]
 
         max_temp = fc.get("maxtempC", "?")
         min_temp = fc.get("mintempC", "?")
         desc = fc.get("hourly", [{}])[4].get("weatherDesc", [{}])[0].get("value", "")
 
-        # Map to emoji
         desc_lower = desc.lower()
         if "sun" in desc_lower or "clear" in desc_lower:
             emoji = "☀️"
@@ -113,11 +172,14 @@ def fetch_weather(location="Cambridge"):
         else:
             emoji = "🌤️"
 
-        summary = f"{min_temp}–{max_temp}°C {desc}"
-        return summary, emoji
+        return f"{min_temp}–{max_temp}°C {desc}", emoji
 
-    except Exception as e:
-        return f"天气获取失败 ({e})", "🌤️"
+    except Exception as e1:
+        _log(f"wttr.in failed ({e1}), trying Open-Meteo fallback")
+        try:
+            return _fetch_weather_open_meteo()
+        except Exception as e2:
+            return f"天气获取失败 ({e2})", "🌤️"
 
 
 def get_school_status(saturday, leys_data):
@@ -182,35 +244,118 @@ def pick_best_tournaments(be_data, saturday):
     return candidates[:2]
 
 
-def pick_best_events(events_data, n=3):
-    """Pick diverse activity options."""
+def pick_best_events(events_data, n=3, weather_hint=None):
+    """Pick diverse activity options with scoring logic."""
     if not events_data or events_data.get("status") == "error":
         return []
+
     events = events_data.get("events", [])
-    # Prefer variety of categories
-    categories_seen = set()
-    picked = []
+    scored_events = []
+
     for ev in events:
+        score = 0
         cat = ev.get("category", "general")
+        source = ev.get("source", "")
+        title = ev.get("title", "")
+        venue = ev.get("venue", "")
+        price = ev.get("price", "")
+
+        # 1. Quality check — penalize vague/venue-only titles heavily
+        title_lower = title.lower().strip()
+        # If title is just a venue name or very short, it's probably junk
+        if len(title_lower) < 10 and not any(kw in title_lower for kw in ["go ape", "iwm", "v&a", "ice"]):
+            score -= 25
+        # Penalize titles that look like bare venue names (no event description)
+        venue_only_markers = ["junction", "hall", "centre", "center", "arena", "stadium"]
+        if any(m in title_lower for m in venue_only_markers) and len(title_lower.split()) <= 3:
+            score -= 30
+
+        # 2. Freshness bonus — ONLY for scraped events with specific titles
+        if source != "curated" and len(title) > 15:
+            score += 15
+        # Curated options are proven quality — give them a baseline
+        if source == "curated":
+            score += 10
+
+        # 3. Prefer kid-friendly categories (10 and 13 year olds)
+        kid_friendly_high = ["sports", "outdoor", "attraction", "show"]
+        kid_friendly_med = ["museum", "family"]
+        if cat in kid_friendly_high:
+            score += 20
+        elif cat in kid_friendly_med:
+            score += 12
+        elif cat == "general":
+            score -= 15  # Penalize general category (usually junk)
+
+        # 4. Bonus for known great options
+        great_options = ["duxford", "go ape", "warner bros", "harry potter", "thorpe park",
+                         "natural history", "science museum", "colchester zoo", "west end",
+                         "greenwich", "clip 'n climb", "ice skating"]
+        if any(g in title_lower for g in great_options):
+            score += 15
+
+        # 5. Bonus for having a real price (not just "varies")
+        if price and price not in ("varies", "check website", "unknown"):
+            score += 5
+
+        # 6. Weather matching
+        if weather_hint == "indoor":
+            if ev.get("indoor") is True:
+                score += 30
+            elif ev.get("indoor") is False:
+                score -= 20
+        elif weather_hint == "outdoor":
+            if ev.get("indoor") is False:
+                score += 30
+            elif ev.get("indoor") is True:
+                score -= 10
+
+        # 7. Seasonal check
+        if ev.get("seasonal") is True:
+            # Simple check: assuming winter is Dec-Feb, avoid seasonal outdoor then
+            month = datetime.now().month
+            if month in [12, 1, 2] and ev.get("indoor") is False:
+                score -= 30
+
+        # 8. Small randomization for variety
+        score += random.randint(0, 5)
+
+        ev["_score"] = score
+        scored_events.append(ev)
+
+    # Sort by score descending
+    scored_events.sort(key=lambda x: x["_score"], reverse=True)
+
+    # Pick n diverse events
+    picked = []
+    categories_seen = set()
+    for ev in scored_events:
+        cat = ev.get("category", "general")
+        # Ensure variety unless we run out of events
         if cat not in categories_seen or len(picked) < 2:
             picked.append(ev)
             categories_seen.add(cat)
         if len(picked) >= n:
             break
+
     return picked
 
 
-def format_option(title, details, price, travel, emoji="🎭"):
+def format_option(title, details, price, travel, url=None, emoji="🎭"):
     """Format a single activity option."""
     parts = [details] if details else []
     if price:
         parts.append(f"£{price}" if not str(price).startswith("£") else str(price))
     if travel and travel not in ("local", "unknown"):
         parts.append(f"🚗 {travel}")
+
     detail_str = " | ".join(parts)
+    output = f"{emoji} {title}"
     if detail_str:
-        return f"{emoji} {title}\n   {detail_str}"
-    return f"{emoji} {title}"
+        output += f"\n   {detail_str}"
+    if url and url.startswith("http"):
+        output += f"\n   🔗 {url}"
+    return output
 
 
 def build_message(saturday, sunday, weather_summary, weather_emoji,
@@ -286,6 +431,7 @@ def main():
     # 4. Scrape tournaments (with prewarm diagnostics)
     _log("STEP [4/6] START scrape_be_tournaments")
     t0 = time.monotonic()
+    # HTTP scraper with cookie wall auto-accept (no browser needed)
     be_script = os.path.join(SCRIPT_DIR, "scrape_be_tournaments.py")
     be_data = run_script(be_script, timeout=30)
     s3 = time.monotonic() - t0
@@ -316,6 +462,13 @@ def main():
     _log(f"STEP [6/6] END   fetch_weather elapsed={s5:.1f}s outcome=ok")
     _step_timings.append(("fetch_weather", s5, "ok"))
 
+    # Determine weather hint
+    weather_hint = None
+    if any(kw in weather_summary.lower() for kw in ["rain", "shower", "drizzle", "snow", "thunder"]):
+        weather_hint = "indoor"
+    elif any(kw in weather_summary.lower() for kw in ["sunny", "clear", "fair"]):
+        weather_hint = "outdoor"
+
     # --- Build options ---
     options = []
 
@@ -331,7 +484,7 @@ def main():
         travel = t.get("distance_from_cambridge", "")
         deadline_str = f" | 截止: {deadline}" if deadline else ""
         detail = f"{level} | {venue} | {date}{deadline_str}"
-        options.append(format_option(f"选项1: 🏸 {name}", detail, "", travel, "🏸"))
+        options.append(format_option(f"选项1: 🏸 {name}", detail, "", travel, url=t.get("url"), emoji="🏸"))
     elif be_data.get("status") != "error":
         options.append("🏸 选项1: 本周末暂无附近U15青少年赛事")
     else:
@@ -346,9 +499,13 @@ def main():
         _log(f"BE_FAILURE error_code={be_error_code}")
         options.append(f"🏸 选项1: {_label}")
 
-    # Option 2: Events/shows
-    events = pick_best_events(events_data, n=3)
-    for i, ev in enumerate(events[:2], 2):
+    # Option 2 & 3: Events/shows/activities
+    events = pick_best_events(events_data, n=4, weather_hint=weather_hint)
+
+    # Filter out sailing from generic options to handle it separately
+    other_events = [ev for ev in events if ev.get("source") != "london_sailing_club"]
+
+    for i, ev in enumerate(other_events[:2], 2):
         title = ev.get("title", "活动")
         venue = ev.get("venue", ev.get("location", ""))
         price = ev.get("price", "varies")
@@ -362,32 +519,52 @@ def main():
         emoji = cat_emojis.get(ev.get("category", "general"), "🎭")
         detail = venue
         option_title = f"选项{i}: {title}"
-        options.append(format_option(option_title, detail, price, travel, emoji))
+        options.append(format_option(option_title, detail, price, travel, url=url, emoji=emoji))
 
-    # Option 3: Outdoor/nature if not already covered
-    if len(events) < 2:
+    # --- Sailing Trip Section ---
+    sailing_events = [ev for ev in events_data.get("events", [])
+                      if ev.get("source") == "london_sailing_club"
+                      and "Sailing Trip" in ev.get("event_type", "")]
+
+    # Filter for next 6 months
+    six_months_later = datetime.now() + timedelta(days=180)
+    upcoming_sailing = []
+    for sev in sailing_events:
+        try:
+            ev_date = datetime.strptime(sev.get("date", ""), "%Y-%m-%d")
+            if datetime.now() <= ev_date <= six_months_later:
+                upcoming_sailing.append(sev)
+        except ValueError:
+            continue
+
+    if upcoming_sailing:
+        options.append("")
+        options.append("⛵ London Sailing Club 近期航海活动:")
+        for sev in upcoming_sailing[:8]: # Show top 8
+            # Format: • 4月6日 Taster Day | £85 | 13 places
+            try:
+                dt = datetime.strptime(sev.get("date", ""), "%Y-%m-%d")
+                date_str = dt.strftime("%-m月%-d日")
+            except:
+                date_str = sev.get("display_date", sev.get("date", ""))
+
+            title = sev.get("title", "").replace("⛵ ", "")
+            price = sev.get("price", "check website")
+            places = sev.get("places_available", "")
+
+            line = f"   • {date_str} {title} | {price}"
+            if places:
+                line += f" | {places}"
+            options.append(line)
+
+    # Fallback if no options
+    if not options:
         options.append(format_option(
-            "选项3: 🌿 剑桥河边漫步 + 野餐",
+            "推荐活动: 🌿 剑桥河边漫步 + 野餐",
             "Grantchester Meadows",
             "免费",
             "local",
-            "🌿"
-        ))
-
-    # Always surface London Sailing Club monitor item when available
-    sailing = None
-    if events_data and events_data.get("status") != "error":
-        for ev in events_data.get("events", []):
-            if ev.get("source") == "london_sailing_club":
-                sailing = ev
-                break
-    if sailing:
-        options.append(format_option(
-            "⛵ London Sailing Club（监控）",
-            sailing.get("venue", "London Sailing Club"),
-            sailing.get("price", "check website"),
-            sailing.get("travel_time", "~1h15m by train"),
-            "⛵"
+            emoji="🌿"
         ))
 
     # --- Build and print message ---

@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>London Skyscraper Walk</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+  body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+  #map { width: 100%; height: 100vh; }
+  .info-panel {
+    position: absolute; top: 10px; left: 50px; z-index: 1000;
+    background: rgba(255,255,255,0.95); padding: 12px 16px;
+    border-radius: 10px; box-shadow: 0 2px 12px rgba(0,0,0,0.2);
+    max-width: 280px; font-size: 13px;
+  }
+  .info-panel h2 { margin: 0 0 6px; font-size: 16px; }
+  .info-panel p { margin: 0; color: #555; line-height: 1.4; }
+  .stop-icon {
+    background: #1a1a2e; color: #fff; border-radius: 50%;
+    width: 28px; height: 28px; display: flex; align-items: center;
+    justify-content: center; font-weight: 700; font-size: 13px;
+    border: 2px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+  }
+</style>
+</head>
+<body>
+<div class="info-panel">
+  <h2>🏙️ London Skyscraper Walk</h2>
+  <p>~4 km · 2-3 hours · Tower Hill → Canary Wharf<br>
+  <strong>Tap markers</strong> for details</p>
+</div>
+<div id="map"></div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const stops = [
+  { lat: 51.5081, lng: -0.0759, name: "Tower of London", num: 1,
+    desc: "Start here (Tower Hill tube). Historic fortress — quick photo stop before the modern towers.", height: "Medieval" },
+  { lat: 51.5112, lng: -0.0833, name: "20 Fenchurch St (Walkie Talkie)", num: 2,
+    desc: "FREE Sky Garden on top — book at skygarden.london. 360° views over the whole city.", height: "160m" },
+  { lat: 51.5134, lng: -0.0824, name: "Leadenhall Building (Cheesegrater)", num: 3,
+    desc: "225m tall with a striking angular wedge shape. The Leadenhall Market nearby is worth a peek.", height: "225m" },
+  { lat: 51.5145, lng: -0.0803, name: "30 St Mary Axe (The Gherkin)", num: 4,
+    desc: "London's most iconic skyscraper. Great photo ops from the plaza at the base.", height: "180m" },
+  { lat: 51.5152, lng: -0.0815, name: "22 Bishopsgate", num: 5,
+    desc: "London's tallest office tower at 278m. Has a free public viewing gallery and restaurant.", height: "278m" },
+  { lat: 51.5138, lng: -0.0810, name: "52 Lime St (The Scalpel)", num: 6,
+    desc: "Sharp angular design — nicknamed for its blade-like profile. Completed 2018.", height: "190m" },
+  { lat: 51.5120, lng: -0.0760, name: "Lloyd's Building", num: 7,
+    desc: "Richard Rogers' inside-out masterpiece. All the pipes and lifts are on the outside — kids love it.", height: "95m" },
+  { lat: 51.5055, lng: -0.0235, name: "One Canada Square, Canary Wharf", num: 8,
+    desc: "Finish here! The second skyscraper cluster. Loads of restaurants. DLR/Jubilee home.", height: "235m" }
+];
+
+const map = L.map('map', { zoomControl: false }).setView([51.5110, -0.0550], 14);
+L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+  attribution: '&copy; OpenStreetMap &copy; CARTO',
+  maxZoom: 19
+}).addTo(map);
+
+// Draw route line
+const routeCoords = stops.map(s => [s.lat, s.lng]);
+L.polyline(routeCoords, {
+  color: '#e63946', weight: 4, opacity: 0.8,
+  dashArray: '10, 8', lineCap: 'round'
+}).addTo(map);
+
+// Add markers
+stops.forEach(stop => {
+  const icon = L.divIcon({
+    className: '',
+    html: `<div class="stop-icon">${stop.num}</div>`,
+    iconSize: [28, 28],
+    iconAnchor: [14, 14]
+  });
+  L.marker([stop.lat, stop.lng], { icon })
+    .addTo(map)
+    .bindPopup(`
+      <div style="font-family:sans-serif;max-width:220px">
+        <strong style="font-size:14px">${stop.num}. ${stop.name}</strong>
+        <div style="color:#888;font-size:11px;margin:2px 0">Height: ${stop.height}</div>
+        <div style="font-size:12px;margin-top:4px;line-height:1.4">${stop.desc}</div>
+      </div>
+    `);
+});
+
+// Fit map to show all stops
+map.fitBounds(routeCoords, { padding: [60, 60] });
+</script>
+</body>
+</html>
