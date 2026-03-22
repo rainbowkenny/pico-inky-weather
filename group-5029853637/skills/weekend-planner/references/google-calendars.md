@@ -23,7 +23,7 @@ from gcal_auth import get_headers, get_credentials, CAL_PRIMARY, CAL_FAMILY, hea
 Both calendars MUST be checked when planning weekends to avoid conflicts.
 
 ## Google Maps Places API
-- **API Key**: `(redacted)`
+- **API Key**: (stored in GCP console — do not commit to git)
 - **Endpoint**: `maps.googleapis.com/maps/api/place/textsearch/json` (legacy)
 - **Free tier**: $200/month (~6000+ searches)
 - **Use for**: local service searches with ratings, reviews, parking
